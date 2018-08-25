@@ -7,28 +7,19 @@ import (
 	"errors"
 	"os"
 	"syscall"
-	"time"
-
 	"github.com/ipfs/go-ipfs/repo"
 	cfg "github.com/ipfs/go-ipfs/repo/config"
-	"github.com/ipfs/go-ipfs/thirdparty/verifbs"
-	uio "github.com/ipfs/go-ipfs/unixfs/io"
 
 	"gx/ipfs/QmRg1gKTHzc3CZXSKzem8aR4E3TubFhbgXwfVuWnSK5CC5/go-metrics-interface"
 	"gx/ipfs/QmSF8fPo3jgVBAy8fpdjjYqgG87dkJgUprRBHRd2tmfgpP/goprocess/context"
 	ds "gx/ipfs/QmXRKBQA4wXP7xWbFiZsR1GP4HV6wMDQ1aWFxZZ4uBcPX9/go-datastore"
-	retry "gx/ipfs/QmXRKBQA4wXP7xWbFiZsR1GP4HV6wMDQ1aWFxZZ4uBcPX9/go-datastore/retrystore"
 	dsync "gx/ipfs/QmXRKBQA4wXP7xWbFiZsR1GP4HV6wMDQ1aWFxZZ4uBcPX9/go-datastore/sync"
 	pstore "gx/ipfs/QmXauCuJzmzapetmC6W4TuDJLL1yFFrVzSHoWv8YdbmnxH/go-libp2p-peerstore"
 	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
-	bstore "gx/ipfs/QmaG4DZ4JaqEfvPWt5nPPgoTzhc1tr1T3f4Nu9Jpdm8ymY/go-ipfs-blockstore"
 	ci "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
 )
 
 type BuildCfg struct {
-	// If online is set, the node will have networking enabled
-	Online bool
-
 	// ExtraOpts is a map of extra options used to configure the ipfs nodes creation
 	ExtraOpts map[string]bool
 
@@ -123,13 +114,10 @@ func NewNode(ctx context.Context, cfg *BuildCfg) (*IpfsNode, error) {
 	ctx = metrics.CtxScope(ctx, "ipfs")
 
 	n := &IpfsNode{
-		mode:      offlineMode,
+		mode:      onlineMode,
 		Repo:      cfg.Repo,
 		ctx:       ctx,
 		Peerstore: pstore.NewPeerstore(),
-	}
-	if cfg.Online {
-		n.mode = onlineMode
 	}
 
 	// TODO: this is a weird circular-ish dependency, rework it
@@ -158,56 +146,14 @@ func setupNode(ctx context.Context, n *IpfsNode, cfg *BuildCfg) error {
 		return err
 	}
 
-	rds := &retry.Datastore{
-		Batching:    n.Repo.Datastore(),
-		Delay:       time.Millisecond * 200,
-		Retries:     6,
-		TempErrFunc: isTooManyFDError,
-	}
-
-	// hash security
-	bs := bstore.NewBlockstore(rds)
-	bs = &verifbs.VerifBS{Blockstore: bs}
-
-	opts := bstore.DefaultCacheOpts()
-	conf, err := n.Repo.Config()
-	if err != nil {
-		return err
-	}
-
-	// TEMP: setting global sharding switch here
-	uio.UseHAMTSharding = conf.Experimental.ShardingEnabled
-
-	opts.HasBloomFilterSize = conf.Datastore.BloomFilterSize
-	if !cfg.Permanent {
-		opts.HasBloomFilterSize = 0
-	}
-
-	cbs, err := bstore.CachedBlockstore(ctx, bs, opts)
-	if err != nil {
-		return err
-	}
-
-	n.BaseBlocks = cbs
-	n.GCLocker = bstore.NewGCLocker()
-	n.Blockstore = bstore.NewGCBlockstore(cbs, n.GCLocker)
-
 	rcfg, err := n.Repo.Config()
 	if err != nil {
 		return err
 	}
 
-	if rcfg.Datastore.HashOnRead {
-		bs.HashOnRead(true)
-	}
-
-	if cfg.Online {
-		do := setupDiscoveryOption(rcfg.Discovery)
-		if err := n.startOnlineServices(ctx, cfg.Routing, cfg.Host, do); err != nil {
-			return err
-		}
-	} else {
-		//n.Exchange = offline.Exchange(n.Blockstore)
+	do := setupDiscoveryOption(rcfg.Discovery)
+	if err := n.startOnlineServices(ctx, cfg.Routing, cfg.Host, do); err != nil {
+		return err
 	}
 
 	return nil

@@ -18,7 +18,6 @@ func main (){
 	nCfg := &core.BuildCfg{
 		Repo:      repo,
 		Permanent: true, // It is temporary way to signify that node is permanent
-		Online:    true,
 		ExtraOpts: map[string]bool{
 			"mplex":  false,
 		},
@@ -29,7 +28,8 @@ func main (){
 		fmt.Printf(err.Error())
 	}
 
-	c, err := cid.Decode("QmafkFaZHH5zWoLupE5W9zkGsF8r6ShTxWGF7topbxXRnU")
+	//c, err := cid.Decode("QmXoKv5VauAAFDmNzYNSGerHaFpAXXQTfz3nqBTzfYnYrD")
+	c, err := cid.Decode("QmbqsMj8Sv9NGhdhYrz8XDbkJbkpoL6fx4ePyLF7qRJuhn")
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -44,5 +44,4 @@ func main (){
 		fmt.Println("RawData: ")
 		fmt.Println(string(block.RawData()))
 	}
-
 }

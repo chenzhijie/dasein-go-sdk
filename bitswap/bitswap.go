@@ -10,22 +10,21 @@ import (
 	"sync/atomic"
 	"time"
 
-	decision "github.com/daseinio/dasein-go-sdk/bitswap/decision"
+	"github.com/daseinio/dasein-go-sdk/bitswap/decision"
 	bsmsg "github.com/daseinio/dasein-go-sdk/bitswap/message"
 	bsnet "github.com/daseinio/dasein-go-sdk/bitswap/network"
-	notifications "github.com/daseinio/dasein-go-sdk/bitswap/notifications"
+	"github.com/daseinio/dasein-go-sdk/bitswap/notifications"
 
-	delay "gx/ipfs/QmRJVNatYJwTAHgdSM1Xef9QVQ1Ch3XHdmcrykjP5Y4soL/go-ipfs-delay"
-	flags "gx/ipfs/QmRMGdC6HKdLsPDABL9aXPDidrpmEHzJqFWSvshkbn9Hj8/go-ipfs-flags"
+	"gx/ipfs/QmRJVNatYJwTAHgdSM1Xef9QVQ1Ch3XHdmcrykjP5Y4soL/go-ipfs-delay"
+	"gx/ipfs/QmRMGdC6HKdLsPDABL9aXPDidrpmEHzJqFWSvshkbn9Hj8/go-ipfs-flags"
 	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
-	metrics "gx/ipfs/QmRg1gKTHzc3CZXSKzem8aR4E3TubFhbgXwfVuWnSK5CC5/go-metrics-interface"
+	"gx/ipfs/QmRg1gKTHzc3CZXSKzem8aR4E3TubFhbgXwfVuWnSK5CC5/go-metrics-interface"
 	process "gx/ipfs/QmSF8fPo3jgVBAy8fpdjjYqgG87dkJgUprRBHRd2tmfgpP/goprocess"
 	procctx "gx/ipfs/QmSF8fPo3jgVBAy8fpdjjYqgG87dkJgUprRBHRd2tmfgpP/goprocess/context"
-	peer "gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
-	blockstore "gx/ipfs/QmaG4DZ4JaqEfvPWt5nPPgoTzhc1tr1T3f4Nu9Jpdm8ymY/go-ipfs-blockstore"
-	cid "gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
-	exchange "gx/ipfs/QmdcAXgEHUueP4A7b5hjabKn2EooeHgMreMvFC249dGCgc/go-ipfs-exchange-interface"
-	blocks "gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
+	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
+	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
+	"gx/ipfs/QmdcAXgEHUueP4A7b5hjabKn2EooeHgMreMvFC249dGCgc/go-ipfs-exchange-interface"
+	"gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
 	"fmt"
 )
 
@@ -67,8 +66,7 @@ var rebroadcastDelay = delay.Fixed(time.Minute)
 // BitSwapNetwork. This function registers the returned instance as the network
 // delegate.
 // Runs until context is cancelled.
-func New(parent context.Context, network bsnet.BitSwapNetwork,
-	bstore blockstore.Blockstore) exchange.Interface {
+func New(parent context.Context, network bsnet.BitSwapNetwork) exchange.Interface {
 
 	// important to use provided parent context (since it may include important
 	// loggable data). It's probably not a good idea to allow bitswap to be
@@ -91,9 +89,8 @@ func New(parent context.Context, network bsnet.BitSwapNetwork,
 	})
 
 	bs := &Bitswap{
-		blockstore:    bstore,
 		notifications: notif,
-		engine:        decision.NewEngine(ctx, bstore), // TODO close the engine with Close() method
+		engine:        decision.NewEngine(ctx), // TODO close the engine with Close() method
 		network:       network,
 		findKeys:      make(chan *blockRequest, sizeBatchRequestChan),
 		process:       px,
@@ -133,10 +130,6 @@ type Bitswap struct {
 
 	// network delivers messages on behalf of the session
 	network bsnet.BitSwapNetwork
-
-	// blockstore is the local database
-	// NB: ensure threadsafety
-	blockstore blockstore.Blockstore
 
 	// notifications engine for receiving new blocks and routing them to the
 	// appropriate user requests
@@ -314,11 +307,6 @@ func (bs *Bitswap) receiveBlockFrom(blk blocks.Block, from peer.ID) error {
 	default:
 	}
 	fmt.Println("Block Cid: ", blk.Cid().String())
-	err := bs.blockstore.Put(blk)
-	if err != nil {
-		log.Errorf("Error writing block to datastore: %s", err)
-		return err
-	}
 
 	// NOTE: There exists the possiblity for a race condition here.  If a user
 	// creates a node, then adds it to the dagservice while another goroutine
@@ -364,7 +352,7 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 
 	// This call records changes to wantlists, blocks received,
 	// and number of bytes transfered.
-	bs.engine.MessageReceived(p, incoming)
+	//bs.engine.MessageReceived(p, incoming)
 	// TODO: this is bad, and could be easily abused.
 	// Should only track *useful* messages in ledger
 
@@ -397,16 +385,8 @@ var ErrAlreadyHaveBlock = errors.New("already have block")
 
 func (bs *Bitswap) updateReceiveCounters(b blocks.Block) {
 	blkLen := len(b.RawData())
-	has, err := bs.blockstore.Has(b.Cid())
-	if err != nil {
-		log.Infof("blockstore.Has error: %s", err)
-		return
-	}
 
 	bs.allMetric.Observe(float64(blkLen))
-	if has {
-		bs.dupMetric.Observe(float64(blkLen))
-	}
 
 	bs.counterLk.Lock()
 	defer bs.counterLk.Unlock()
@@ -414,10 +394,6 @@ func (bs *Bitswap) updateReceiveCounters(b blocks.Block) {
 
 	c.blocksRecvd++
 	c.dataRecvd += uint64(len(b.RawData()))
-	if has {
-		c.dupBlocksRecvd++
-		c.dupDataRecvd += uint64(blkLen)
-	}
 }
 
 // Connected/Disconnected warns bitswap about peer connections

@@ -6,13 +6,11 @@ import (
 	"sync"
 	"time"
 
-	bsmsg "github.com/daseinio/dasein-go-sdk/bitswap/message"
-
 	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
 	process "gx/ipfs/QmSF8fPo3jgVBAy8fpdjjYqgG87dkJgUprRBHRd2tmfgpP/goprocess"
 	procctx "gx/ipfs/QmSF8fPo3jgVBAy8fpdjjYqgG87dkJgUprRBHRd2tmfgpP/goprocess/context"
-	peer "gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
-	cid "gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
+	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
+	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 )
 
 var TaskWorkerCount = 8
@@ -22,14 +20,6 @@ func (bs *Bitswap) startWorkers(px process.Process, ctx context.Context) {
 	px.Go(func(px process.Process) {
 		bs.providerQueryManager(ctx)
 	})
-
-	// Start up workers to handle requests from other nodes for the data on this node
-	for i := 0; i < TaskWorkerCount; i++ {
-		i := i
-		px.Go(func(px process.Process) {
-			bs.taskWorker(ctx, i)
-		})
-	}
 
 	// Start up a worker to manage periodically resending our wantlist out to peers
 	px.Go(func(px process.Process) {
@@ -45,46 +35,6 @@ func (bs *Bitswap) startWorkers(px process.Process, ctx context.Context) {
 	// consider increasing number if providing blocks bottlenecks
 	// file transfers
 	px.Go(bs.provideWorker)
-}
-
-func (bs *Bitswap) taskWorker(ctx context.Context, id int) {
-	idmap := logging.LoggableMap{"ID": id}
-	defer log.Debug("bitswap task worker shutting down...")
-	for {
-		log.Event(ctx, "Bitswap.TaskWorker.Loop", idmap)
-		select {
-		case nextEnvelope := <-bs.engine.Outbox():
-			select {
-			case envelope, ok := <-nextEnvelope:
-				if !ok {
-					continue
-				}
-				log.Event(ctx, "Bitswap.TaskWorker.Work", logging.LoggableF(func() map[string]interface{} {
-					return logging.LoggableMap{
-						"ID":     id,
-						"Target": envelope.Peer.Pretty(),
-						"Block":  envelope.Block.Cid().String(),
-					}
-				}))
-
-				// update the BS ledger to reflect sent message
-				// TODO: Should only track *useful* messages in ledger
-				outgoing := bsmsg.New(false)
-				outgoing.AddBlock(envelope.Block)
-				bs.engine.MessageSent(envelope.Peer, outgoing)
-
-				bs.wm.SendBlock(ctx, envelope)
-				bs.counterLk.Lock()
-				bs.counters.blocksSent++
-				bs.counters.dataSent += uint64(len(envelope.Block.RawData()))
-				bs.counterLk.Unlock()
-			case <-ctx.Done():
-				return
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 func (bs *Bitswap) provideWorker(px process.Process) {

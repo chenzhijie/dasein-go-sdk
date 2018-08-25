@@ -10,9 +10,8 @@ import (
 	wl "github.com/daseinio/dasein-go-sdk/bitswap/wantlist"
 
 	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
-	peer "gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
-	bstore "gx/ipfs/QmaG4DZ4JaqEfvPWt5nPPgoTzhc1tr1T3f4Nu9Jpdm8ymY/go-ipfs-blockstore"
-	blocks "gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
+	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
+	"gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
 )
 
 // TODO consider taking responsibility for other types of requests. For
@@ -83,8 +82,6 @@ type Engine struct {
 	// taskWorker goroutine
 	outbox chan (<-chan *Envelope)
 
-	bs bstore.Blockstore
-
 	lock sync.Mutex // protects the fields immediatly below
 	// ledgerMap lists Ledgers by their Partner key.
 	ledgerMap map[peer.ID]*ledger
@@ -92,16 +89,14 @@ type Engine struct {
 	ticker *time.Ticker
 }
 
-func NewEngine(ctx context.Context, bs bstore.Blockstore) *Engine {
+func NewEngine(ctx context.Context) *Engine {
 	e := &Engine{
 		ledgerMap:        make(map[peer.ID]*ledger),
-		bs:               bs,
 		peerRequestQueue: newPRQ(),
 		outbox:           make(chan (<-chan *Envelope), outboxChanBuffer),
 		workSignal:       make(chan struct{}, 1),
 		ticker:           time.NewTicker(time.Millisecond * 100),
 	}
-	go e.taskWorker(ctx)
 	return e
 }
 
@@ -124,71 +119,6 @@ func (e *Engine) LedgerForPeer(p peer.ID) *Receipt {
 		Sent:      ledger.Accounting.BytesSent,
 		Recv:      ledger.Accounting.BytesRecv,
 		Exchanged: ledger.ExchangeCount(),
-	}
-}
-
-func (e *Engine) taskWorker(ctx context.Context) {
-	defer close(e.outbox) // because taskWorker uses the channel exclusively
-	for {
-		oneTimeUse := make(chan *Envelope, 1) // buffer to prevent blocking
-		select {
-		case <-ctx.Done():
-			return
-		case e.outbox <- oneTimeUse:
-		}
-		// receiver is ready for an outoing envelope. let's prepare one. first,
-		// we must acquire a task from the PQ...
-		envelope, err := e.nextEnvelope(ctx)
-		if err != nil {
-			close(oneTimeUse)
-			return // ctx cancelled
-		}
-		oneTimeUse <- envelope // buffered. won't block
-		close(oneTimeUse)
-	}
-}
-
-// nextEnvelope runs in the taskWorker goroutine. Returns an error if the
-// context is cancelled before the next Envelope can be created.
-func (e *Engine) nextEnvelope(ctx context.Context) (*Envelope, error) {
-	for {
-		nextTask := e.peerRequestQueue.Pop()
-		for nextTask == nil {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-e.workSignal:
-				nextTask = e.peerRequestQueue.Pop()
-			case <-e.ticker.C:
-				e.peerRequestQueue.thawRound()
-				nextTask = e.peerRequestQueue.Pop()
-			}
-		}
-
-		// with a task in hand, we're ready to prepare the envelope...
-
-		block, err := e.bs.Get(nextTask.Entry.Cid)
-		if err != nil {
-			log.Errorf("tried to execute a task and errored fetching block: %s", err)
-			// If we don't have the block, don't hold that against the peer
-			// make sure to update that the task has been 'completed'
-			nextTask.Done()
-			continue
-		}
-
-		return &Envelope{
-			Peer:  nextTask.Target,
-			Block: block,
-			Sent: func() {
-				nextTask.Done()
-				select {
-				case e.workSignal <- struct{}{}:
-					// work completing may mean that our queue will provide new
-					// work to be done.
-				default:
-				}
-			},
-		}, nil
 	}
 }
 
@@ -236,13 +166,6 @@ func (e *Engine) MessageReceived(p peer.ID, m bsmsg.BitSwapMessage) error {
 			log.Debugf("%s cancel %s", p, entry.Cid)
 			l.CancelWant(entry.Cid)
 			e.peerRequestQueue.Remove(entry.Cid, p)
-		} else {
-			log.Debugf("wants %s - %d", entry.Cid, entry.Priority)
-			l.Wants(entry.Cid, entry.Priority)
-			if exists, err := e.bs.Has(entry.Cid); err == nil && exists {
-				e.peerRequestQueue.Push(entry.Entry, p)
-				newWorkExists = true
-			}
 		}
 	}
 
