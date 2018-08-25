@@ -23,8 +23,6 @@ import (
 
 	bitswap "github.com/daseinio/dasein-go-sdk/bitswap"
 	bsnet "github.com/daseinio/dasein-go-sdk/bitswap/network"
-	rp "github.com/daseinio/dasein-go-sdk/reprovide"
-
 
 	p2p "github.com/ipfs/go-ipfs/p2p"
 	"github.com/ipfs/go-ipfs/path/resolver"
@@ -118,7 +116,6 @@ type IpfsNode struct {
 	Exchange     exchange.Interface  // the block exchange + strategy (bitswap)
 
 	Ping         *ping.PingService
-	Reprovider   *rp.Reprovider // the value reprovider system
 
 	Floodsub *floodsub.PubSub
 	P2P      *p2p.P2P
@@ -260,39 +257,6 @@ func constructConnMgr(cfg config.ConnMgr) (ifconnmgr.ConnManager, error) {
 	default:
 		return nil, fmt.Errorf("unrecognized ConnMgr.Type: %q", cfg.Type)
 	}
-}
-
-func (n *IpfsNode) startLateOnlineServices(ctx context.Context) error {
-	cfg, err := n.Repo.Config()
-	if err != nil {
-		return err
-	}
-
-	var keyProvider rp.KeyChanFunc
-
-	switch cfg.Reprovider.Strategy {
-	case "all":
-		fallthrough
-	case "":
-		keyProvider = rp.NewBlockstoreProvider(n.Blockstore)
-	default:
-		return fmt.Errorf("unknown reprovider strategy '%s'", cfg.Reprovider.Strategy)
-	}
-	n.Reprovider = rp.NewReprovider(ctx, n.Routing, keyProvider)
-
-	reproviderInterval := kReprovideFrequency
-	if cfg.Reprovider.Interval != "" {
-		dur, err := time.ParseDuration(cfg.Reprovider.Interval)
-		if err != nil {
-			return err
-		}
-
-		reproviderInterval = dur
-	}
-
-	go n.Reprovider.Run(reproviderInterval)
-
-	return nil
 }
 
 func makeAddrsFactory(cfg config.Addresses) (p2pbhost.AddrsFactory, error) {

@@ -210,11 +210,5 @@ func setupNode(ctx context.Context, n *IpfsNode, cfg *BuildCfg) error {
 		//n.Exchange = offline.Exchange(n.Blockstore)
 	}
 
-	if cfg.Online {
-		if err := n.startLateOnlineServices(ctx); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
