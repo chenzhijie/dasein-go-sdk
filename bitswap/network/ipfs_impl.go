@@ -180,7 +180,6 @@ func (bsnet *impl) Provide(ctx context.Context, k *cid.Cid) error {
 // handleNewStream receives a new stream from the network.
 func (bsnet *impl) handleNewStream(s inet.Stream) {
 	defer s.Close()
-	fmt.Println("handleNewStream")
 	if bsnet.receiver == nil {
 		s.Reset()
 		return
@@ -188,7 +187,6 @@ func (bsnet *impl) handleNewStream(s inet.Stream) {
 
 	reader := ggio.NewDelimitedReader(s, inet.MessageSizeMax)
 	for {
-		fmt.Println("FromPBReader")
 		received, err := bsmsg.FromPBReader(reader)
 		if err != nil {
 			if err != io.EOF {
@@ -202,7 +200,6 @@ func (bsnet *impl) handleNewStream(s inet.Stream) {
 		p := s.Conn().RemotePeer()
 		ctx := context.Background()
 		log.Debugf("bitswap net handleNewStream from %s", s.Conn().RemotePeer())
-		fmt.Println("ReceiveMessage")
 		bsnet.receiver.ReceiveMessage(ctx, p, received)
 	}
 }

@@ -96,10 +96,10 @@ type IpfsNode struct {
 	PNetFingerprint []byte     // fingerprint of private network
 
 	// Services
-	Peerstore  pstore.Peerstore     // storage for other Peer instances
+	Peerstore pstore.Peerstore // storage for other Peer instances
 
-	Reporter   metrics.Reporter
-	Discovery  discovery.Service
+	Reporter  metrics.Reporter
+	Discovery discovery.Service
 
 	// Online
 	PeerHost     p2phost.Host        // the network host (server+client)
@@ -107,7 +107,7 @@ type IpfsNode struct {
 	Routing      routing.IpfsRouting // the routing system. recommend ipfs-dht
 	Exchange     exchange.Interface  // the block exchange + strategy (bitswap)
 
-	Ping         *ping.PingService
+	Ping *ping.PingService
 
 	Floodsub *floodsub.PubSub
 	P2P      *p2p.P2P
@@ -418,7 +418,6 @@ func (n *IpfsNode) teardown() error {
 	// NOTE: The order that objects are added(closed) matters, if an object
 	// needs to use another during its shutdown/cleanup process, it should be
 	// closed before that other object
-
 
 	if n.Exchange != nil {
 		closers = append(closers, n.Exchange)
