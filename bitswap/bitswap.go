@@ -3,20 +3,19 @@
 package bitswap
 
 import (
-	"fmt"
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 
-
-	ex "github.com/daseinio/dasein-go-sdk/exchange_interface"
+	"github.com/daseinio/dasein-go-sdk/bitswap/decision"
 	bsmsg "github.com/daseinio/dasein-go-sdk/bitswap/message"
 	bsnet "github.com/daseinio/dasein-go-sdk/bitswap/network"
 	"github.com/daseinio/dasein-go-sdk/bitswap/notifications"
-	"github.com/daseinio/dasein-go-sdk/bitswap/decision"
+	ex "github.com/daseinio/dasein-go-sdk/exchange_interface"
 
 	"gx/ipfs/QmRJVNatYJwTAHgdSM1Xef9QVQ1Ch3XHdmcrykjP5Y4soL/go-ipfs-delay"
 	"gx/ipfs/QmRMGdC6HKdLsPDABL9aXPDidrpmEHzJqFWSvshkbn9Hj8/go-ipfs-flags"
@@ -429,4 +428,8 @@ func (bs *Bitswap) GetWantlist() []*cid.Cid {
 
 func (bs *Bitswap) IsOnline() bool {
 	return true
+}
+
+func (bs *Bitswap) Network() bsnet.BitSwapNetwork {
+	return bs.network
 }
