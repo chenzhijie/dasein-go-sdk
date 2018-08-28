@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/daseinio/dasein-go-sdk/bitswap"
+	ex "github.com/daseinio/dasein-go-sdk/exchange_interface"
 	bsnet "github.com/daseinio/dasein-go-sdk/bitswap/network"
 
 	"github.com/ipfs/go-ipfs/p2p"
@@ -57,7 +58,7 @@ import (
 	ic "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
 	"gx/ipfs/Qmax8X1Kfahf5WfSB68EWDG3d3qyS3Sqs1v412fjPTfRwx/go-libp2p-interface-connmgr"
 	mplex "gx/ipfs/Qmc14vuKyGqX27RvBhekYytxSFJpaEgQVuVJgKSm69MEix/go-smux-multiplex"
-	"gx/ipfs/QmdcAXgEHUueP4A7b5hjabKn2EooeHgMreMvFC249dGCgc/go-ipfs-exchange-interface"
+	//"gx/ipfs/QmdcAXgEHUueP4A7b5hjabKn2EooeHgMreMvFC249dGCgc/go-ipfs-exchange-interface"
 	"gx/ipfs/QmdeBtQGXjSt7cb97nx9JyLHHv5va2LyEAue7Q5tDFzpLy/go-libp2p-metrics"
 	"gx/ipfs/QmenK8PgcpM2KYzEKnGx1LyN1QXawswM2F6HktCbWKuC1b/go-libp2p-pnet"
 	mafilter "gx/ipfs/Qmf2UAmRwDG4TvnkQpHZWPAzw7rpCYVhxmRXmYxXr5LD1g/go-maddr-filter"
@@ -105,7 +106,7 @@ type IpfsNode struct {
 	PeerHost     p2phost.Host        // the network host (server+client)
 	Bootstrapper io.Closer           // the periodic bootstrapper
 	Routing      routing.IpfsRouting // the routing system. recommend ipfs-dht
-	Exchange     exchange.Interface  // the block exchange + strategy (bitswap)
+	Exchange     ex.Exchange  // the block exchange + strategy (bitswap)
 
 	Ping *ping.PingService
 

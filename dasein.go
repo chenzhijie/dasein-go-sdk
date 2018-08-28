@@ -43,54 +43,16 @@ func (c *Client) GetData(cidString string) ([]byte, error) {
 	}
 
 	return c.decodeBlock(CID)
-	/*
-		block, err := c.node.Exchange.GetBlock(context.Background(), CID)
-		if err != nil {
-			return nil, err
-		}
+}
 
-		dagNode, err := ml.DecodeProtobufBlock(block)
-		if err != nil {
-			return nil, err
-		}
+func (c *Client) RmData(cidString string) error {
+	//c.node.PeerHost.Network().ConnsToPeer()
 
-		if len(dagNode.Links()) == 0 {
-			pb := new(ftpb.Data)
-			if err := proto.Unmarshal(dagNode.(*ml.ProtoNode).Data(), pb); err != nil {
-				return nil, err
-			}
-			return pb.Data, nil
-		} else {
-			var buffer bytes.Buffer
-			for i := 0; i < len(dagNode.Links()); i++ {
-				tmpBlock, err := c.node.Exchange.GetBlock(context.Background(), dagNode.Links()[i].Cid)
-				if err != nil {
-					return nil, err
-				}
-
-				dagChild, err := ml.DecodeProtobufBlock(tmpBlock)
-				if err != nil {
-					return nil, err
-				}
-				pb := new(ftpb.Data)
-				if err := proto.Unmarshal(dagChild.(*ml.ProtoNode).Data(), pb); err != nil {
-					return nil, err
-				}
-
-				n, err := buffer.Write(pb.Data)
-				if err != nil || n == 0 {
-					return nil, err
-				}
-			}
-
-			return buffer.Bytes(), nil
-		}
-	*/
+	return nil
 }
 
 func (c *Client) decodeBlock(CID *cid.Cid) ([]byte, error) {
 	var buf bytes.Buffer
-
 	block, err := c.node.Exchange.GetBlock(context.Background(), CID)
 	if err != nil {
 		return nil, err
