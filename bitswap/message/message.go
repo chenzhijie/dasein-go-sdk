@@ -14,6 +14,12 @@ import (
 	cid "gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 )
 
+const (
+	NOOPER = 0
+	CANCLE = 1
+	DELETE = 2
+)
+
 // TODO move message.go into the bitswap package
 // TODO move bs/msg/internal/pb to bs/internal/pb and rename pb package to bitswap_pb
 
@@ -29,6 +35,8 @@ type BitSwapMessage interface {
 	AddEntry(key *cid.Cid, priority int)
 
 	Cancel(key *cid.Cid)
+
+	Delete(key *cid.Cid)
 
 	Empty() bool
 
@@ -68,7 +76,7 @@ func newMsg(full bool) *impl {
 
 type Entry struct {
 	*wantlist.Entry
-	Cancel bool
+	Operation int
 }
 
 func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
@@ -78,7 +86,7 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 		if err != nil {
 			return nil, fmt.Errorf("incorrectly formatted cid in wantlist: %s", err)
 		}
-		m.addEntry(c, int(e.GetPriority()), e.GetCancel())
+		m.addEntry(c, int(e.GetPriority()), int(e.GetOperate()))
 	}
 
 	// deprecated
@@ -137,26 +145,31 @@ func (m *impl) Blocks() []blocks.Block {
 
 func (m *impl) Cancel(k *cid.Cid) {
 	delete(m.wantlist, k.KeyString())
-	m.addEntry(k, 0, true)
+	m.addEntry(k, 0, CANCLE)
+}
+
+func (m *impl) Delete(k *cid.Cid) {
+	delete(m.wantlist, k.KeyString())
+	m.addEntry(k, 0, DELETE)
 }
 
 func (m *impl) AddEntry(k *cid.Cid, priority int) {
-	m.addEntry(k, priority, false)
+	m.addEntry(k, priority, NOOPER)
 }
 
-func (m *impl) addEntry(c *cid.Cid, priority int, cancel bool) {
+func (m *impl) addEntry(c *cid.Cid, priority int, operation int) {
 	k := c.KeyString()
 	e, exists := m.wantlist[k]
 	if exists {
 		e.Priority = priority
-		e.Cancel = cancel
+		e.Operation = operation
 	} else {
 		m.wantlist[k] = &Entry{
 			Entry: &wantlist.Entry{
 				Cid:      c,
 				Priority: priority,
 			},
-			Cancel: cancel,
+			Operation: operation,
 		}
 	}
 }
@@ -187,7 +200,7 @@ func (m *impl) ToProtoV0() *pb.Message {
 		pbm.Wantlist.Entries = append(pbm.Wantlist.Entries, &pb.Message_Wantlist_Entry{
 			Block:    proto.String(e.Cid.KeyString()),
 			Priority: proto.Int32(int32(e.Priority)),
-			Cancel:   proto.Bool(e.Cancel),
+			Operate:   proto.Int32(int32(e.Operation)),
 		})
 	}
 	pbm.Wantlist.Full = proto.Bool(m.full)
@@ -208,7 +221,7 @@ func (m *impl) ToProtoV1() *pb.Message {
 		pbm.Wantlist.Entries = append(pbm.Wantlist.Entries, &pb.Message_Wantlist_Entry{
 			Block:    proto.String(e.Cid.KeyString()),
 			Priority: proto.Int32(int32(e.Priority)),
-			Cancel:   proto.Bool(e.Cancel),
+			Operate:   proto.Int32(int32(e.Operation)),
 		})
 	}
 	pbm.Wantlist.Full = proto.Bool(m.full)

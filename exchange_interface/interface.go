@@ -12,6 +12,9 @@ type Exchange interface { // type Exchanger interface
 	GetBlock(context.Context, *cid.Cid) (blocks.Block, error)
 	GetBlocks(context.Context, []*cid.Cid) (<-chan blocks.Block, error)
 
+	DelBlock(context.Context, *cid.Cid) error
+	DelBlocks(context.Context, []*cid.Cid) error
+
 	// TODO Should callers be concerned with whether the block was made
 	// available on the network?
 	HasBlock(blocks.Block) error

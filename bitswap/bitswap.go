@@ -290,6 +290,34 @@ func (bs *Bitswap) CancelWants(cids []*cid.Cid, ses uint64) {
 	bs.wm.CancelWants(context.Background(), cids, nil, ses)
 }
 
+// DelBlock deletes a given key from the wantlist
+func (bs *Bitswap) DelBlock(ctx context.Context, cid *cid.Cid) error {
+	msg := bsmsg.New(true)
+	msg.Delete(cid)
+
+	id, err := peer.IDB58Decode("QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
+	if err != nil {
+		return err
+	}
+
+	return bs.network.SendMessage(context.TODO(), id, msg)
+}
+
+// DelBlocks deletes given keys from the wantlist
+func (bs *Bitswap) DelBlocks(ctx context.Context, cids []*cid.Cid) error {
+	msg := bsmsg.New(true)
+	for _, cid := range cids {
+		msg.Delete(cid)
+	}
+
+	id, err := peer.IDB58Decode("QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
+	if err != nil {
+		return err
+	}
+
+	return bs.network.SendMessage(context.TODO(), id, msg)
+}
+
 // HasBlock announces the existence of a block to this bitswap service. The
 // service will potentially notify its peers.
 func (bs *Bitswap) HasBlock(blk blocks.Block) error {

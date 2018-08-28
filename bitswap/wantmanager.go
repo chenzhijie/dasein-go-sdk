@@ -8,11 +8,11 @@ import (
 	engine "github.com/daseinio/dasein-go-sdk/bitswap/decision"
 	bsmsg "github.com/daseinio/dasein-go-sdk/bitswap/message"
 	bsnet "github.com/daseinio/dasein-go-sdk/bitswap/network"
-	wantlist "github.com/daseinio/dasein-go-sdk/bitswap/wantlist"
+	"github.com/daseinio/dasein-go-sdk/bitswap/wantlist"
 
-	metrics "gx/ipfs/QmRg1gKTHzc3CZXSKzem8aR4E3TubFhbgXwfVuWnSK5CC5/go-metrics-interface"
-	peer "gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
-	cid "gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
+	"gx/ipfs/QmRg1gKTHzc3CZXSKzem8aR4E3TubFhbgXwfVuWnSK5CC5/go-metrics-interface"
+	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
+	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 )
 
 type WantManager struct {
@@ -79,12 +79,17 @@ type msgQueue struct {
 // WantBlocks adds the given cids to the wantlist, tracked by the given session
 func (pm *WantManager) WantBlocks(ctx context.Context, ks []*cid.Cid, peers []peer.ID, ses uint64) {
 	log.Infof("want blocks: %s", ks)
-	pm.addEntries(ctx, ks, peers, false, ses)
+	pm.addEntries(ctx, ks, peers, bsmsg.NOOPER, ses)
 }
 
 // CancelWants removes the given cids from the wantlist, tracked by the given session
 func (pm *WantManager) CancelWants(ctx context.Context, ks []*cid.Cid, peers []peer.ID, ses uint64) {
-	pm.addEntries(context.Background(), ks, peers, true, ses)
+	pm.addEntries(context.Background(), ks, peers, bsmsg.CANCLE, ses)
+}
+
+// DeleteWants delete the given cids from the wantlist, tracked by the given session
+func (pm *WantManager) DeleteWants(ctx context.Context, ks []*cid.Cid, peers []peer.ID, ses uint64) {
+	pm.addEntries(context.Background(), ks, peers, bsmsg.DELETE, ses)
 }
 
 type wantSet struct {
@@ -93,11 +98,11 @@ type wantSet struct {
 	from    uint64
 }
 
-func (pm *WantManager) addEntries(ctx context.Context, ks []*cid.Cid, targets []peer.ID, cancel bool, ses uint64) {
+func (pm *WantManager) addEntries(ctx context.Context, ks []*cid.Cid, targets []peer.ID, operate int, ses uint64) {
 	entries := make([]*bsmsg.Entry, 0, len(ks))
 	for i, k := range ks {
 		entries = append(entries, &bsmsg.Entry{
-			Cancel: cancel,
+			Operation: operate,
 			Entry:  wantlist.NewRefEntry(k, kMaxPriority-i),
 		})
 	}
@@ -293,13 +298,12 @@ func (pm *WantManager) Run() {
 	for {
 		select {
 		case ws := <-pm.incoming:
-
 			// is this a broadcast or not?
 			brdc := len(ws.targets) == 0
 
 			// add changes to our wantlist
 			for _, e := range ws.entries {
-				if e.Cancel {
+				if e.Operation == bsmsg.CANCLE || e.Operation == bsmsg.DELETE{
 					if brdc {
 						pm.bcwl.Remove(e.Cid, ws.from)
 					}
@@ -385,10 +389,15 @@ func (mq *msgQueue) addMessage(entries []*bsmsg.Entry, ses uint64) {
 	// otherwise, combine the one we are holding with the
 	// one passed in
 	for _, e := range entries {
-		if e.Cancel {
+		if e.Operation == bsmsg.CANCLE {
 			if mq.wl.Remove(e.Cid, ses) {
 				work = true
 				mq.out.Cancel(e.Cid)
+			}
+		} else if e.Operation == bsmsg.DELETE {
+			if mq.wl.Remove(e.Cid, ses) {
+				work = true
+				mq.out.Delete(e.Cid)
 			}
 		} else {
 			if mq.wl.Add(e.Cid, e.Priority, ses) {

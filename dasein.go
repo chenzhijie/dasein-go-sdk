@@ -26,8 +26,8 @@ import (
 	ipld "gx/ipfs/Qme5bWv7wtjUNGsK2BNGVUFPKiuxWrsqrtvYwCLRw8YFES/go-ipld-format"
 )
 
-// var repo = "/Users/ggxxjj123/ipfs_test/ipfs2"
-var repo = "/Users/zhijie/Desktop/onchain/ipfs-test/ipfs/node2"
+var repo = "/Users/ggxxjj123/ipfs_test/ipfs2"
+//var repo = "/Users/zhijie/Desktop/onchain/ipfs-test/ipfs/node2"
 
 type Client struct {
 	node *core.IpfsNode
@@ -56,14 +56,24 @@ func (c *Client) GetData(cidString string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return c.decodeBlock(CID)
 }
 
-func (c *Client) RmData(cidString string) error {
-	//c.node.PeerHost.Network().ConnsToPeer()
+func (c *Client) DelData(cidString string) error {
+	id, err := peer.IDB58Decode("QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
+	if err != nil {
+		return err
+	}
+	pi := c.node.Peerstore.PeerInfo(id)
+	if len(pi.Addrs) == 0 {
+		return fmt.Errorf("peer not found")
+	}
 
-	return nil
+	CID, err := cid.Decode(cidString)
+	if err != nil {
+		return err
+	}
+	return c.node.Exchange.DelBlock(context.Background(), CID)
 }
 
 func (c *Client) SendFile(fileName string) error {

@@ -162,7 +162,7 @@ func (e *Engine) MessageReceived(p peer.ID, m bsmsg.BitSwapMessage) error {
 	}
 
 	for _, entry := range m.Wantlist() {
-		if entry.Cancel {
+		if entry.Operation == bsmsg.CANCLE {
 			log.Debugf("%s cancel %s", p, entry.Cid)
 			l.CancelWant(entry.Cid)
 			e.peerRequestQueue.Remove(entry.Cid, p)

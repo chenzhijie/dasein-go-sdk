@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	//"os"
 	"os"
 
 	sdk "github.com/daseinio/dasein-go-sdk"
@@ -10,8 +9,8 @@ import (
 
 var smallTxt = "QmfWAu8auG7NdzVyUAeb1PU5uUs5W3DrCWhMk6B1iCsnvk"
 var bigTxt = "QmW5CME8vkw3ndeuDuf5a5oL9x55yPWfhF4fz4R6XTMTBk"
-
 //var largeTxt = "QmU7QRQpSZhukKsraEaa23Re1AzLqpFvyHPwayseVKTbFp"
+var deleteTxt = "QmSaVDqoCceZp9JCwGVfhQUZUogHVsBfLfU2dr4juN6Ke1"
 
 func testSendFile() {
 	client, err := sdk.NewClient()
@@ -63,12 +62,13 @@ func testSendFile() {
 }
 
 func testGetData() {
-
 	client, err := sdk.NewClient()
 	if err != nil {
 		fmt.Println(err.Error())
+		return
 	}
 
+	fmt.Println("-----------------------")
 	fmt.Println("Single Block Test")
 	data, err := client.GetData(smallTxt)
 	if err != nil {
@@ -85,6 +85,7 @@ func testGetData() {
 	}
 	file.Close()
 
+	fmt.Println("-----------------------")
 	fmt.Println("Multi Block Test")
 	data, err = client.GetData(bigTxt)
 	if err != nil {
@@ -100,6 +101,16 @@ func testGetData() {
 		fmt.Println(err.Error())
 	}
 	file.Close()
+
+	fmt.Println("-----------------------")
+	fmt.Println("Delete Block Test")
+	err = client.DelData(deleteTxt)
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Printf("Delete %s success", deleteTxt)
+	}
+
 	/*
 		fmt.Println("Multi Block Test")
 		data, err = client.GetData(largeTxt)
@@ -120,5 +131,6 @@ func testGetData() {
 }
 
 func main() {
-	testSendFile()
+	testGetData()
+	//testSendFile()
 }
