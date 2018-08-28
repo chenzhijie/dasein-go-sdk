@@ -80,7 +80,7 @@ func (c *Client) SendFile(fileName string) error {
 		fmt.Printf(err.Error())
 	}
 
-	//send root node
+	// send root node
 	msg := message.New(true)
 	msg.AddBlock(root)
 	err = bsnet.SendMessage(context.TODO(), id, msg)
@@ -176,8 +176,7 @@ func nodesFromFile(fileName string) (ipld.Node, []*helpers.UnixfsNode, error) {
 	db := params.New(chnk)
 
 	if tri {
-		root, err := trickle.Layout(db)
-		return root, nil, err
+		return trickle.Layout(db)
 	}
 	return balanced.Layout(db)
 }

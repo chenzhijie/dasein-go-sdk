@@ -19,48 +19,47 @@ func testSendFile() {
 		fmt.Println(err.Error())
 		return
 	}
-	var smallFile = "smallfile"
-
-	smallF, err := os.OpenFile(smallFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	defer smallF.Close()
-	smallF.WriteString("hello world\n")
-	err = client.SendFile(smallFile)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	err = os.Remove(smallFile)
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-
-	// var bigFile = "bigfile"
-	// bigF, err := os.OpenFile(bigFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
+	// var smallFile = "smallfile"
+	// smallF, err := os.OpenFile(smallFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
 	// if err != nil {
 	// 	fmt.Println(err.Error())
 	// 	return
 	// }
-	// defer bigF.Close()
-
-	// for i := 1; i < 400000; i++ {
-	// 	bigF.WriteString(fmt.Sprintf("%d\n", i))
-	// }
-
-	// err = client.SendFile(bigFile)
+	// defer smallF.Close()
+	// smallF.WriteString("hello world\n")
+	// err = client.SendFile(smallFile)
 	// if err != nil {
 	// 	fmt.Println(err.Error())
 	// 	return
 	// }
-	// err = os.Remove(bigFile)
+	// err = os.Remove(smallFile)
 	// if err != nil {
 	// 	fmt.Println(err.Error())
 	// 	return
 	// }
+
+	var bigFile = "bigfile"
+	bigF, err := os.OpenFile(bigFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	defer bigF.Close()
+
+	for i := 1; i < 400000; i++ {
+		bigF.WriteString(fmt.Sprintf("%d\n", i))
+	}
+
+	err = client.SendFile(bigFile)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	err = os.Remove(bigFile)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
 }
 
 func testGetData() {
