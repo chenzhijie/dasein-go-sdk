@@ -27,7 +27,8 @@ import (
 )
 
 var repo = "/Users/ggxxjj123/ipfs_test/ipfs2"
-//var repo = "/Users/zhijie/Desktop/onchain/ipfs-test/ipfs/node2"
+
+// var repo = "/Users/zhijie/Desktop/onchain/ipfs-test/ipfs/node2"
 
 type Client struct {
 	node *core.IpfsNode
@@ -76,8 +77,8 @@ func (c *Client) DelData(cidString string) error {
 	return c.node.Exchange.DelBlock(context.Background(), CID)
 }
 
-func (c *Client) SendFile(fileName string) error {
-	id, err := peer.IDB58Decode("QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng")
+func (c *Client) SendFile(fileName string, to string, copynum int32, nodelist []string) error {
+	id, err := peer.IDB58Decode(to)
 	pi := c.node.Peerstore.PeerInfo(id)
 	if len(pi.Addrs) == 0 {
 		return fmt.Errorf("peer not found")
@@ -93,6 +94,7 @@ func (c *Client) SendFile(fileName string) error {
 	// send root node
 	msg := message.New(true)
 	msg.AddBlock(root)
+	msg.SetBackup(copynum, nodelist)
 	err = bsnet.SendMessage(context.TODO(), id, msg)
 	if err != nil {
 		return err
@@ -105,6 +107,7 @@ func (c *Client) SendFile(fileName string) error {
 			// send others
 			msg := message.New(true)
 			msg.AddBlock(dagNode)
+			msg.SetBackup(copynum, nodelist)
 			err = bsnet.SendMessage(context.TODO(), id, msg)
 			if err != nil {
 				return err

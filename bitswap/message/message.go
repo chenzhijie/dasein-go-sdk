@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"io"
 
+	blocks "gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
+
 	pb "github.com/daseinio/dasein-go-sdk/bitswap/message/pb"
 	wantlist "github.com/daseinio/dasein-go-sdk/bitswap/wantlist"
-	blocks "gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
 
 	inet "gx/ipfs/QmXfkENeeBvh3zYA51MaSdGUdBjhQ99cP5WQe8zgr6wchG/go-libp2p-net"
 	ggio "gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/io"
@@ -47,6 +48,10 @@ type BitSwapMessage interface {
 	Exportable
 
 	Loggable() map[string]interface{}
+
+	SetBackup(int32, []string)
+
+	Backup() *Backup
 }
 
 type Exportable interface {
@@ -60,6 +65,7 @@ type impl struct {
 	full     bool
 	wantlist map[string]*Entry
 	blocks   map[string]blocks.Block
+	backup   *Backup
 }
 
 func New(full bool) BitSwapMessage {
@@ -71,6 +77,7 @@ func newMsg(full bool) *impl {
 		blocks:   make(map[string]blocks.Block),
 		wantlist: make(map[string]*Entry),
 		full:     full,
+		backup:   new(Backup),
 	}
 }
 
@@ -115,7 +122,7 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 
 		m.AddBlock(blk)
 	}
-
+	m.SetBackup(pbm.GetBackup().GetCopynum(), pbm.GetBackup().GetNodelist())
 	return m, nil
 }
 
@@ -200,7 +207,7 @@ func (m *impl) ToProtoV0() *pb.Message {
 		pbm.Wantlist.Entries = append(pbm.Wantlist.Entries, &pb.Message_Wantlist_Entry{
 			Block:    proto.String(e.Cid.KeyString()),
 			Priority: proto.Int32(int32(e.Priority)),
-			Operate:   proto.Int32(int32(e.Operation)),
+			Operate:  proto.Int32(int32(e.Operation)),
 		})
 	}
 	pbm.Wantlist.Full = proto.Bool(m.full)
@@ -210,6 +217,9 @@ func (m *impl) ToProtoV0() *pb.Message {
 	for _, b := range blocks {
 		pbm.Blocks = append(pbm.Blocks, b.RawData())
 	}
+	pbm.Backup = new(pb.Message_Backup)
+	pbm.GetBackup().Copynum = proto.Int32(m.backup.Copynum)
+	pbm.GetBackup().Nodelist = m.backup.Nodelist
 	return pbm
 }
 
@@ -221,7 +231,7 @@ func (m *impl) ToProtoV1() *pb.Message {
 		pbm.Wantlist.Entries = append(pbm.Wantlist.Entries, &pb.Message_Wantlist_Entry{
 			Block:    proto.String(e.Cid.KeyString()),
 			Priority: proto.Int32(int32(e.Priority)),
-			Operate:   proto.Int32(int32(e.Operation)),
+			Operate:  proto.Int32(int32(e.Operation)),
 		})
 	}
 	pbm.Wantlist.Full = proto.Bool(m.full)
@@ -235,6 +245,9 @@ func (m *impl) ToProtoV1() *pb.Message {
 		}
 		pbm.Payload = append(pbm.Payload, blk)
 	}
+	pbm.Backup = new(pb.Message_Backup)
+	pbm.GetBackup().Copynum = proto.Int32(m.backup.Copynum)
+	pbm.GetBackup().Nodelist = m.backup.Nodelist
 	return pbm
 }
 
@@ -259,4 +272,20 @@ func (m *impl) Loggable() map[string]interface{} {
 		"blocks": blocks,
 		"wants":  m.Wantlist(),
 	}
+}
+
+type Backup struct {
+	Copynum  int32
+	Nodelist []string
+}
+
+func (m *impl) SetBackup(cn int32, nl []string) {
+	m.backup = &Backup{
+		Copynum:  cn,
+		Nodelist: nl,
+	}
+}
+
+func (m *impl) Backup() *Backup {
+	return m.backup
 }

@@ -9,6 +9,7 @@ import (
 
 var smallTxt = "QmfWAu8auG7NdzVyUAeb1PU5uUs5W3DrCWhMk6B1iCsnvk"
 var bigTxt = "QmW5CME8vkw3ndeuDuf5a5oL9x55yPWfhF4fz4R6XTMTBk"
+
 //var largeTxt = "QmU7QRQpSZhukKsraEaa23Re1AzLqpFvyHPwayseVKTbFp"
 var deleteTxt = "QmSaVDqoCceZp9JCwGVfhQUZUogHVsBfLfU2dr4juN6Ke1"
 
@@ -26,7 +27,7 @@ func testSendFile() {
 	// }
 	// defer smallF.Close()
 	// smallF.WriteString("hello world\n")
-	// err = client.SendFile(smallFile)
+	// err = client.SendFile(smallFile, "QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng", 2, []string{"Qme2Z9M2FTAyJPDk4BVn2dCv1PoCq4xgsjZDimZKxYyVki", "QmZQgmCeAuFSuxLmbcxLxyXAngKAfcFYzyyuvgQbqVWB9n"})
 	// if err != nil {
 	// 	fmt.Println(err.Error())
 	// 	return
@@ -49,7 +50,7 @@ func testSendFile() {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 
-	err = client.SendFile(bigFile)
+	err = client.SendFile(bigFile, "QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng", 2, []string{"Qme2Z9M2FTAyJPDk4BVn2dCv1PoCq4xgsjZDimZKxYyVki", "QmZQgmCeAuFSuxLmbcxLxyXAngKAfcFYzyyuvgQbqVWB9n"})
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -132,5 +133,5 @@ func testGetData() {
 
 func main() {
 	testGetData()
-	//testSendFile()
+	// testSendFile()
 }

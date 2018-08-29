@@ -19,7 +19,13 @@ message Message {
     optional bytes data = 2;
   }
 
+   message Backup {
+    optional int32 copynum = 1; // the copy number without self
+    repeated string nodelist = 2; // the dst node list for copy
+  }
+
   optional Wantlist wantlist = 1;
   repeated bytes blocks = 2;		// used to send Blocks in bitswap 1.0.0
   repeated Block payload = 3;		// used to send Blocks in bitswap 1.1.0
+  optional Backup backup = 4;   // used to send backup blocks
 }
