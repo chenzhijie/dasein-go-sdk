@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	dag "github.com/ipfs/go-ipfs/merkledag"
-	mdtest "github.com/ipfs/go-ipfs/merkledag/test"
+	dag "github.com/daseinio/dasein-go-sdk/merkledag"
+	mdtest "github.com/daseinio/dasein-go-sdk/merkledag/test"
 
 	cid "gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 	ipld "gx/ipfs/Qme5bWv7wtjUNGsK2BNGVUFPKiuxWrsqrtvYwCLRw8YFES/go-ipld-format"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	config "github.com/ipfs/go-ipfs/repo/config"
+	config "github.com/daseinio/dasein-go-sdk/repo/config"
 	testutil "gx/ipfs/QmVvkK7s5imCiq3JVbL3pGfnhcCnf3LrFJPF4GE2sAoGZf/go-testutil"
 	pstore "gx/ipfs/QmXauCuJzmzapetmC6W4TuDJLL1yFFrVzSHoWv8YdbmnxH/go-libp2p-peerstore"
 )

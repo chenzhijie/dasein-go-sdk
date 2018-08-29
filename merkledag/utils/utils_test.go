@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	dag "github.com/ipfs/go-ipfs/merkledag"
-	mdtest "github.com/ipfs/go-ipfs/merkledag/test"
+	dag "github.com/daseinio/dasein-go-sdk/merkledag"
+	mdtest "github.com/daseinio/dasein-go-sdk/merkledag/test"
 	path "github.com/ipfs/go-ipfs/path"
 
 	cid "gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"

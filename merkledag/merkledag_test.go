@@ -15,9 +15,9 @@ import (
 
 	bserv "github.com/ipfs/go-ipfs/blockservice"
 	bstest "github.com/ipfs/go-ipfs/blockservice/test"
-	. "github.com/ipfs/go-ipfs/merkledag"
-	mdpb "github.com/ipfs/go-ipfs/merkledag/pb"
-	dstest "github.com/ipfs/go-ipfs/merkledag/test"
+	. "github.com/daseinio/dasein-go-sdk/merkledag"
+	mdpb "github.com/daseinio/dasein-go-sdk/merkledag/pb"
+	dstest "github.com/daseinio/dasein-go-sdk/merkledag/test"
 
 	u "gx/ipfs/QmNiJuT8Ja3hMVpBHXv3Q6dwmperaQ6JjLtpMQgMCD7xvx/go-ipfs-util"
 	offline "gx/ipfs/QmWM5HhdG5ZQNyHQ5XhMdGmV9CvLpFynQfGpTxN2MEM7Lc/go-ipfs-exchange-offline"

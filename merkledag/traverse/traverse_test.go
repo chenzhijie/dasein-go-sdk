@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	mdag "github.com/ipfs/go-ipfs/merkledag"
-	mdagtest "github.com/ipfs/go-ipfs/merkledag/test"
+	mdag "github.com/daseinio/dasein-go-sdk/merkledag"
+	mdagtest "github.com/daseinio/dasein-go-sdk/merkledag/test"
 
 	ipld "gx/ipfs/Qme5bWv7wtjUNGsK2BNGVUFPKiuxWrsqrtvYwCLRw8YFES/go-ipld-format"
 )

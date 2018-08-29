@@ -15,7 +15,7 @@ import (
 	"github.com/daseinio/dasein-go-sdk/importer/helpers"
 	"github.com/daseinio/dasein-go-sdk/importer/trickle"
 	ml "github.com/daseinio/dasein-go-sdk/merkledag"
-	"github.com/ipfs/go-ipfs/repo/fsrepo"
+	"github.com/daseinio/dasein-go-sdk/repo/fsrepo"
 	ftpb "github.com/ipfs/go-ipfs/unixfs/pb"
 
 	chunker "gx/ipfs/QmWo8jYc19ppG7YoTsrr2kEtLRbARTJho5oNXFTR6B7Peq/go-ipfs-chunker"
@@ -60,8 +60,8 @@ func (c *Client) GetData(cidString string) ([]byte, error) {
 	return c.decodeBlock(CID)
 }
 
-func (c *Client) DelData(cidString string) error {
-	id, err := peer.IDB58Decode("QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
+func (c *Client) DelData(cidString string, from string) error {
+	id, err := peer.IDB58Decode(from)
 	if err != nil {
 		return err
 	}
@@ -79,6 +79,9 @@ func (c *Client) DelData(cidString string) error {
 
 func (c *Client) SendFile(fileName string, to string, copynum int32, nodelist []string) error {
 	id, err := peer.IDB58Decode(to)
+	if err != nil {
+		return err
+	}
 	pi := c.node.Peerstore.PeerInfo(id)
 	if len(pi.Addrs) == 0 {
 		return fmt.Errorf("peer not found")

@@ -26,8 +26,8 @@ import (
 	bsnet "github.com/daseinio/dasein-go-sdk/bitswap/network"
 
 	"github.com/ipfs/go-ipfs/p2p"
-	"github.com/ipfs/go-ipfs/repo"
-	"github.com/ipfs/go-ipfs/repo/config"
+	"github.com/daseinio/dasein-go-sdk/repo"
+	"github.com/daseinio/dasein-go-sdk/repo/config"
 
 	"gx/ipfs/QmNSWW3Sb4eju4o2djPQ1L1c2Zj9XN9sMYJL8r1cbxdc6b/go-addr-util"
 	yamux "gx/ipfs/QmNWCEvi7bPRcvqAV8AKLGVNoQdArWi7NJayka2SM4XtRe/go-smux-yamux"

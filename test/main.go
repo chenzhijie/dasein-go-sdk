@@ -105,7 +105,7 @@ func testGetData() {
 
 	fmt.Println("-----------------------")
 	fmt.Println("Delete Block Test")
-	err = client.DelData(deleteTxt)
+	err = client.DelData(deleteTxt, "QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
 	if err != nil {
 		fmt.Println(err.Error())
 	} else {

@@ -5,8 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
-	"github.com/ipfs/go-ipfs/repo"
-	cfg "github.com/ipfs/go-ipfs/repo/config"
+	"github.com/daseinio/dasein-go-sdk/repo"
+	cfg "github.com/daseinio/dasein-go-sdk/repo/config"
 	"os"
 	"syscall"
 

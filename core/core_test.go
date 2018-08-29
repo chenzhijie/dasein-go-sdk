@@ -5,8 +5,8 @@ import (
 
 	context "context"
 
-	"github.com/ipfs/go-ipfs/repo"
-	config "github.com/ipfs/go-ipfs/repo/config"
+	"github.com/daseinio/dasein-go-sdk/repo"
+	config "github.com/daseinio/dasein-go-sdk/repo/config"
 
 	datastore "gx/ipfs/QmXRKBQA4wXP7xWbFiZsR1GP4HV6wMDQ1aWFxZZ4uBcPX9/go-datastore"
 	syncds "gx/ipfs/QmXRKBQA4wXP7xWbFiZsR1GP4HV6wMDQ1aWFxZZ4uBcPX9/go-datastore/sync"
