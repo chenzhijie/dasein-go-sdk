@@ -9,15 +9,15 @@ import (
 
 var smallTxt = "QmfWAu8auG7NdzVyUAeb1PU5uUs5W3DrCWhMk6B1iCsnvk"
 var bigTxt = "QmW5CME8vkw3ndeuDuf5a5oL9x55yPWfhF4fz4R6XTMTBk"
+
 //var largeTxt = "QmU7QRQpSZhukKsraEaa23Re1AzLqpFvyHPwayseVKTbFp"
 var deleteTxt = "QmevhnWdtmz89BMXuuX5pSY2uZtqKLz7frJsrCojT5kmb6"
 
-var swarm = "/ip4/0.0.0.0/tcp/4002"
 var server = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
 
 func testSendFile() {
 
-	sdk.Init(swarm, server)
+	sdk.Init(server)
 	client, err := sdk.NewClient()
 	if err != nil {
 		fmt.Println(err.Error())
@@ -67,7 +67,7 @@ func testSendFile() {
 }
 
 func testGetData() {
-	sdk.Init(swarm, server)
+	sdk.Init(server)
 	client, err := sdk.NewClient()
 	if err != nil {
 		fmt.Println(err.Error())

@@ -103,7 +103,7 @@ func (pm *WantManager) addEntries(ctx context.Context, ks []*cid.Cid, targets []
 	for i, k := range ks {
 		entries = append(entries, &bsmsg.Entry{
 			Operation: operate,
-			Entry:  wantlist.NewRefEntry(k, kMaxPriority-i),
+			Entry:     wantlist.NewRefEntry(k, kMaxPriority-i),
 		})
 	}
 	select {
@@ -303,7 +303,7 @@ func (pm *WantManager) Run() {
 
 			// add changes to our wantlist
 			for _, e := range ws.entries {
-				if e.Operation == bsmsg.CANCLE || e.Operation == bsmsg.DELETE{
+				if e.Operation == bsmsg.CANCLE || e.Operation == bsmsg.DELETE {
 					if brdc {
 						pm.bcwl.Remove(e.Cid, ws.from)
 					}

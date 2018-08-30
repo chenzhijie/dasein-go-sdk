@@ -22,12 +22,11 @@ import (
 	"time"
 
 	"github.com/daseinio/dasein-go-sdk/bitswap"
-	ex "github.com/daseinio/dasein-go-sdk/exchange_interface"
 	bsnet "github.com/daseinio/dasein-go-sdk/bitswap/network"
-
-	"github.com/ipfs/go-ipfs/p2p"
+	ex "github.com/daseinio/dasein-go-sdk/exchange_interface"
 	"github.com/daseinio/dasein-go-sdk/repo"
 	"github.com/daseinio/dasein-go-sdk/repo/config"
+	"github.com/ipfs/go-ipfs/p2p"
 
 	"gx/ipfs/QmNSWW3Sb4eju4o2djPQ1L1c2Zj9XN9sMYJL8r1cbxdc6b/go-addr-util"
 	yamux "gx/ipfs/QmNWCEvi7bPRcvqAV8AKLGVNoQdArWi7NJayka2SM4XtRe/go-smux-yamux"
@@ -106,7 +105,7 @@ type IpfsNode struct {
 	PeerHost     p2phost.Host        // the network host (server+client)
 	Bootstrapper io.Closer           // the periodic bootstrapper
 	Routing      routing.IpfsRouting // the routing system. recommend ipfs-dht
-	Exchange     ex.Exchange  // the block exchange + strategy (bitswap)
+	Exchange     ex.Exchange         // the block exchange + strategy (bitswap)
 
 	Ping *ping.PingService
 
@@ -153,7 +152,7 @@ func (n *IpfsNode) startOnlineServices(ctx context.Context, routingOption Routin
 	tpt := makeSmuxTransport(false)
 
 	//swarmkey, err := n.Repo.SwarmKey()
-	SwarmKey := func()([]byte, error) {
+	SwarmKey := func() ([]byte, error) {
 
 		spath := "/Users/ggxxjj123/ipfs_test/ipfs2/swarm.key"
 		f, err := os.Open(spath)
@@ -228,11 +227,6 @@ func (n *IpfsNode) startOnlineServices(ctx context.Context, routingOption Routin
 	}
 
 	if err := n.startOnlineServicesWithHost(ctx, peerhost, routingOption); err != nil {
-		return err
-	}
-
-	// Ok, now we're ready to listen.
-	if err := startListening(n.PeerHost, cfg); err != nil {
 		return err
 	}
 

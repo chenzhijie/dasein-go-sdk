@@ -1,10 +1,10 @@
 package exchange_interface
 
 import (
-	"io"
 	"context"
 	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 	"gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
+	"io"
 )
 
 // Interface defines the functionality of the IPFS block exchange protocol.

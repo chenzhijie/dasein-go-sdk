@@ -28,8 +28,8 @@ type Client struct {
 	node *core.IpfsNode
 }
 
-func Init(addr string, server string) {
-	core.InitParam(addr, server)
+func Init(server string) {
+	core.InitParam(server)
 }
 
 func NewClient() (*Client, error) {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	bserv "github.com/ipfs/go-ipfs/blockservice"
 	dag "github.com/daseinio/dasein-go-sdk/merkledag"
+	bserv "github.com/ipfs/go-ipfs/blockservice"
 	path "github.com/ipfs/go-ipfs/path"
 
 	offline "gx/ipfs/QmWM5HhdG5ZQNyHQ5XhMdGmV9CvLpFynQfGpTxN2MEM7Lc/go-ipfs-exchange-offline"

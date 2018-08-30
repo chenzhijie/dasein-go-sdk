@@ -18,7 +18,7 @@ import (
 	ci "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
 )
 
-var local, server string
+var server string
 
 type BuildCfg struct {
 	// ExtraOpts is a map of extra options used to configure the ipfs nodes creation
@@ -94,7 +94,7 @@ func defaultRepo(dstore repo.Datastore) (repo.Repo, error) {
 	c.Bootstrap = []string{
 		server,
 	}
-	c.Addresses.Swarm = []string{local}
+
 	c.Identity.PeerID = pid.Pretty()
 	c.Identity.PrivKey = base64.StdEncoding.EncodeToString(privkeyb)
 
@@ -157,7 +157,6 @@ func setupNode(ctx context.Context, n *IpfsNode, cfg *BuildCfg) error {
 	return nil
 }
 
-func InitParam(localAddr string, serverAddr string){
-	local = localAddr
+func InitParam(serverAddr string) {
 	server = serverAddr
 }
