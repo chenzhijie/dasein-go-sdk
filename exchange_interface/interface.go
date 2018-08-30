@@ -22,4 +22,7 @@ type Exchange interface { // type Exchanger interface
 	IsOnline() bool
 
 	io.Closer
+
+	PreAddBlocks(context.Context, string, []*cid.Cid, int32, []string) error
+	AddBlocks(context.Context, string, []blocks.Block, int32, []string) (interface{}, error)
 }

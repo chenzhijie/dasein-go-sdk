@@ -49,9 +49,21 @@ type BitSwapMessage interface {
 
 	Loggable() map[string]interface{}
 
+	SetMessageType(string)
+
+	MessageType() string
+
 	SetBackup(int32, []string)
 
 	Backup() *Backup
+
+	AddLink(string)
+
+	Links() []string
+
+	SetResponse([]byte)
+
+	Response() []byte
 }
 
 type Exportable interface {
@@ -65,7 +77,10 @@ type impl struct {
 	full     bool
 	wantlist map[string]*Entry
 	blocks   map[string]blocks.Block
+	msgType  string
 	backup   *Backup
+	links    []string
+	resp     []byte
 }
 
 func New(full bool) BitSwapMessage {
@@ -77,7 +92,6 @@ func newMsg(full bool) *impl {
 		blocks:   make(map[string]blocks.Block),
 		wantlist: make(map[string]*Entry),
 		full:     full,
-		backup:   new(Backup),
 	}
 }
 
@@ -122,7 +136,14 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 
 		m.AddBlock(blk)
 	}
+	m.SetMessageType(pbm.GetMessageType())
 	m.SetBackup(pbm.GetBackup().GetCopynum(), pbm.GetBackup().GetNodelist())
+	if len(pbm.GetLinks()) > 0 {
+		m.links = pbm.GetLinks()
+	}
+	if len(pbm.GetResponse()) > 0 {
+		m.resp = pbm.GetResponse()
+	}
 	return m, nil
 }
 
@@ -217,9 +238,20 @@ func (m *impl) ToProtoV0() *pb.Message {
 	for _, b := range blocks {
 		pbm.Blocks = append(pbm.Blocks, b.RawData())
 	}
-	pbm.Backup = new(pb.Message_Backup)
-	pbm.GetBackup().Copynum = proto.Int32(m.backup.Copynum)
-	pbm.GetBackup().Nodelist = m.backup.Nodelist
+	pbm.MessageType = proto.String(m.msgType)
+	if m.backup != nil {
+		pbm.Backup = new(pb.Message_Backup)
+		pbm.GetBackup().Copynum = proto.Int32(m.backup.Copynum)
+		pbm.GetBackup().Nodelist = m.backup.Nodelist
+	}
+	if len(m.links) > 0 {
+		pbm.Links = make([]string, 0)
+		pbm.Links = append(pbm.Links, m.links...)
+	}
+	if len(m.resp) > 0 {
+		pbm.Response = make([]byte, 0)
+		pbm.Response = append(pbm.Response, m.resp...)
+	}
 	return pbm
 }
 
@@ -245,9 +277,21 @@ func (m *impl) ToProtoV1() *pb.Message {
 		}
 		pbm.Payload = append(pbm.Payload, blk)
 	}
-	pbm.Backup = new(pb.Message_Backup)
-	pbm.GetBackup().Copynum = proto.Int32(m.backup.Copynum)
-	pbm.GetBackup().Nodelist = m.backup.Nodelist
+
+	pbm.MessageType = proto.String(m.msgType)
+	if m.backup != nil {
+		pbm.Backup = new(pb.Message_Backup)
+		pbm.GetBackup().Copynum = proto.Int32(m.backup.Copynum)
+		pbm.GetBackup().Nodelist = m.backup.Nodelist
+	}
+	if len(m.links) > 0 {
+		pbm.Links = make([]string, 0)
+		pbm.Links = append(pbm.Links, m.links...)
+	}
+	if len(m.resp) > 0 {
+		pbm.Response = make([]byte, 0)
+		pbm.Response = append(pbm.Response, m.resp...)
+	}
 	return pbm
 }
 
@@ -274,6 +318,14 @@ func (m *impl) Loggable() map[string]interface{} {
 	}
 }
 
+func (m *impl) SetMessageType(msgType string) {
+	m.msgType = msgType
+}
+
+func (m *impl) MessageType() string {
+	return m.msgType
+}
+
 type Backup struct {
 	Copynum  int32
 	Nodelist []string
@@ -288,4 +340,26 @@ func (m *impl) SetBackup(cn int32, nl []string) {
 
 func (m *impl) Backup() *Backup {
 	return m.backup
+}
+
+func (m *impl) AddLink(l string) {
+	if len(l) == 0 {
+		return
+	}
+	if m.links == nil {
+		m.links = make([]string, 0)
+	}
+	m.links = append(m.links, l)
+}
+
+func (m *impl) Links() []string {
+	return m.links
+}
+
+func (m *impl) SetResponse(r []byte) {
+	m.resp = r
+}
+
+func (m *impl) Response() []byte {
+	return m.resp
 }

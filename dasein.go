@@ -8,20 +8,27 @@ import (
 	"os"
 	"strings"
 
-	"github.com/daseinio/dasein-go-sdk/bitswap"
-	"github.com/daseinio/dasein-go-sdk/bitswap/message"
-	"github.com/daseinio/dasein-go-sdk/core"
-	"github.com/daseinio/dasein-go-sdk/importer/balanced"
-	"github.com/daseinio/dasein-go-sdk/importer/helpers"
-	"github.com/daseinio/dasein-go-sdk/importer/trickle"
-	ml "github.com/daseinio/dasein-go-sdk/merkledag"
-	ftpb "github.com/daseinio/dasein-go-sdk/unixfs/pb"
+	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
 	chunker "gx/ipfs/QmWo8jYc19ppG7YoTsrr2kEtLRbARTJho5oNXFTR6B7Peq/go-ipfs-chunker"
 	"gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/proto"
 	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
 	mh "gx/ipfs/QmZyZDi491cCNTLfAhwcaDii2Kg4pwKRkhqQzURGDvY6ua/go-multihash"
 	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 	ipld "gx/ipfs/Qme5bWv7wtjUNGsK2BNGVUFPKiuxWrsqrtvYwCLRw8YFES/go-ipld-format"
+	"gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
+
+	"github.com/daseinio/dasein-go-sdk/core"
+	"github.com/daseinio/dasein-go-sdk/importer/balanced"
+	"github.com/daseinio/dasein-go-sdk/importer/helpers"
+	"github.com/daseinio/dasein-go-sdk/importer/trickle"
+	ml "github.com/daseinio/dasein-go-sdk/merkledag"
+	ftpb "github.com/daseinio/dasein-go-sdk/unixfs/pb"
+)
+
+var log = logging.Logger("daseingosdk")
+
+const (
+	MAX_ADD_BLOCKS_SIZE = 10 // max add blocks size by sending msg
 )
 
 type Client struct {
@@ -64,7 +71,27 @@ func (c *Client) DelData(cidString string, from string) error {
 	return c.node.Exchange.DelBlock(context.Background(), CID)
 }
 
-func (c *Client) SendFile(fileName string, to string, copynum int32, nodelist []string) error {
+// PreSendFile send file information to node for checking the storage requirement
+func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, to string, copyNum int32, nodeList []string) error {
+	cids := make([]*cid.Cid, 0)
+	cids = append(cids, root.Cid())
+	for _, node := range list {
+		dagNode, _ := node.GetDagNode()
+		if dagNode.Cid().String() != root.Cid().String() {
+			cids = append(cids, dagNode.Cid())
+		}
+	}
+	return c.node.Exchange.PreAddBlocks(context.Background(), to, cids, copyNum, nodeList)
+}
+
+// SendFile send a file to node with copy number
+func (c *Client) SendFile(fileName string, to string, copyNum int32, nodeList []string) error {
+	// blocks size in one msg
+	blockSizePerMsg := 2
+	if blockSizePerMsg > MAX_ADD_BLOCKS_SIZE {
+		blockSizePerMsg = MAX_ADD_BLOCKS_SIZE
+	}
+
 	id, err := peer.IDB58Decode(to)
 	if err != nil {
 		return err
@@ -73,36 +100,53 @@ func (c *Client) SendFile(fileName string, to string, copynum int32, nodelist []
 	if len(pi.Addrs) == 0 {
 		return fmt.Errorf("peer not found")
 	}
-	bitswap := c.node.Exchange.(*bitswap.Bitswap)
-	bsnet := bitswap.Network()
-
 	root, list, err := nodesFromFile(fileName)
-	if err != nil {
-		fmt.Printf(err.Error())
-	}
-
-	// send root node
-	msg := message.New(true)
-	msg.AddBlock(root)
-	msg.SetBackup(copynum, nodelist)
-	err = bsnet.SendMessage(context.TODO(), id, msg)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("seend %s success\n", root.Cid())
 
-	for _, node := range list {
+	if copyNum > 0 {
+		err = c.PreSendFile(root, list, to, copyNum, nodeList)
+		if err != nil {
+			log.Errorf("pre send file failed :%s", err)
+			return err
+		}
+		log.Infof("pre add blocks success")
+	}
+
+	// send root node
+	ret, err := c.node.Exchange.AddBlocks(context.Background(), to, []blocks.Block{root}, copyNum, nodeList)
+	if err != nil {
+		return err
+	}
+	if copyNum > 0 {
+		log.Infof("send %s success, result:%v", root.Cid(), ret)
+	} else {
+		log.Infof("send %s success", root.Cid())
+	}
+
+	others := make([]blocks.Block, 0)
+	for i, node := range list {
 		dagNode, _ := node.GetDagNode()
 		if dagNode.Cid().String() != root.Cid().String() {
 			// send others
-			msg := message.New(true)
-			msg.AddBlock(dagNode)
-			msg.SetBackup(copynum, nodelist)
-			err = bsnet.SendMessage(context.TODO(), id, msg)
-			if err != nil {
-				return err
+			others = append(others, dagNode)
+			if len(others) >= blockSizePerMsg || i == len(list)-1 {
+				ret, err := c.node.Exchange.AddBlocks(context.Background(), to, others, copyNum, nodeList)
+				if err != nil {
+					return err
+				}
+				for _, sent := range others {
+					if copyNum > 0 {
+						log.Infof("send %s success, size:%d, result:%v", sent.Cid(), len(sent.RawData()), ret)
+					} else {
+						log.Infof("send %s success, size:%d", sent.Cid(), len(sent.RawData()))
+					}
+
+				}
+				//clean slice
+				others = others[:0]
 			}
-			fmt.Printf("send %s success, size:%d\n", dagNode.Cid(), len(dagNode.RawData()))
 		}
 	}
 	return nil
@@ -142,6 +186,7 @@ func (c *Client) decodeBlock(CID *cid.Cid) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// nodesFromFile open a local file and build dag nodes
 func nodesFromFile(fileName string) (ipld.Node, []*helpers.UnixfsNode, error) {
 	cidVer := 0
 	hashFunStr := "sha2-256"

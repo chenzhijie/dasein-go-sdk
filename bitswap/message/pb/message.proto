@@ -25,7 +25,12 @@ message Message {
   }
 
   optional Wantlist wantlist = 1;
-  repeated bytes blocks = 2;		// used to send Blocks in bitswap 1.0.0
-  repeated Block payload = 3;		// used to send Blocks in bitswap 1.1.0
-  optional Backup backup = 4;   // used to send backup blocks
+  repeated bytes blocks = 2;		   // used to send Blocks in bitswap 1.0.0
+  repeated Block payload = 3;		   // used to send Blocks in bitswap 1.1.0
+  
+  optional string messageType = 4; //message type
+  optional Backup backup = 5;      // used to send backup blocks
+  repeated string links = 6;       // used to send all node links for a file
+  optional bytes  response = 7;    // response result 
+  
 }

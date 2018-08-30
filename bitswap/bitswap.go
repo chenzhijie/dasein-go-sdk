@@ -4,6 +4,7 @@ package bitswap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -50,6 +51,10 @@ var (
 
 	// the 1<<18+15 is to observe old file chunks that are 1<<18 + 14 in size
 	metricsBuckets = []float64{1 << 6, 1 << 10, 1 << 14, 1 << 18, 1<<18 + 15, 1 << 22}
+
+	outChanBufferSize      = 10 // receive msg channel size
+	maxPreAddBlocksTimeout = 10 // recive pre addblocks timeout in second
+	maxAddBlocksTimeout    = 10 // recive addblocks timeout in second * 1CopyNum * 1Block
 )
 
 func init() {
@@ -61,6 +66,30 @@ func init() {
 }
 
 var rebroadcastDelay = delay.Fixed(time.Minute)
+
+// Client <--> IPFS message type
+const (
+	MSG_TYPE_PREADDBLOCKS     = "preaddblocks"     // the client send a preaddblocks msg
+	MSG_TYPE_PREADDBLOCKSRESP = "preaddblocksresp" // the client received a preaddblocks response msg
+	MSG_TYPE_ADDBLOCKS        = "addblocks"        // the client send a addblocks msg
+	MSG_TYPE_ADDBLOCKSRESP    = "addblocksresp"    // the client received a addblocks response msg
+)
+
+//CopyState used for set copy state of one copy task
+type CopyState int
+
+const (
+	NoCopy      CopyState = iota //the node has not copy anything
+	CopyFailed                   //the node has copy failed
+	CopySuccess                  //the node has copy success
+)
+
+// AddBlocksResp used for set in bitswap message response
+type AddBlocksResp struct {
+	Result string               `json:"result"` // Result: success / fail
+	Error  string               `json:"error"`  // Error message
+	Copy   map[string]CopyState `json:"copy"`   // Copy state
+}
 
 // New initializes a BitSwap instance that communicates over the provided
 // BitSwapNetwork. This function registers the returned instance as the network
@@ -101,6 +130,7 @@ func New(parent context.Context, network bsnet.BitSwapNetwork) ex.Exchange {
 
 		dupMetric: dupHist,
 		allMetric: allHist,
+		outChan:   make(chan interface{}, outChanBufferSize),
 	}
 	go bs.wm.Run()
 	network.SetDelegate(bs)
@@ -160,6 +190,8 @@ type Bitswap struct {
 
 	sessID   uint64
 	sessIDLk sync.Mutex
+
+	outChan chan interface{}
 }
 
 type counters struct {
@@ -376,6 +408,16 @@ func (bs *Bitswap) SessionsForBlock(c *cid.Cid) []*Session {
 }
 
 func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg.BitSwapMessage) {
+	switch incoming.MessageType() {
+	case MSG_TYPE_PREADDBLOCKSRESP:
+		bs.handlePreAddblocksResp(ctx, p, incoming)
+		return
+	case MSG_TYPE_ADDBLOCKSRESP:
+		bs.handleAddblocksResp(ctx, p, incoming)
+		return
+	default:
+	}
+
 	atomic.AddUint64(&bs.counters.messagesRecvd, 1)
 
 	// This call records changes to wantlists, blocks received,
@@ -458,6 +500,103 @@ func (bs *Bitswap) IsOnline() bool {
 	return true
 }
 
-func (bs *Bitswap) Network() bsnet.BitSwapNetwork {
-	return bs.network
+// PreAddBlocks send preaddblocks msg to check the node state
+func (bs *Bitswap) PreAddBlocks(ctx context.Context, to string, cids []*cid.Cid, copyNum int32, nodeList []string) error {
+	id, err := peer.IDB58Decode(to)
+	if err != nil {
+		return err
+	}
+	msg := bsmsg.New(true)
+	for _, cid := range cids {
+		msg.AddLink(cid.String())
+	}
+	msg.SetMessageType(MSG_TYPE_PREADDBLOCKS)
+	msg.SetBackup(copyNum, nodeList)
+	err = bs.network.SendMessage(ctx, id, msg)
+	if err != nil {
+		log.Errorf("pre add blocks err:%s", err)
+		return err
+	}
+	go func() {
+		<-time.After(time.Duration(maxPreAddBlocksTimeout) * time.Second)
+		bs.outChan <- &AddBlocksResp{
+			Result: "fail",
+			Error:  "wait for response timeout",
+		}
+	}()
+	ret := <-bs.outChan
+	switch ret.(type) {
+	case *AddBlocksResp:
+		if ret.(*AddBlocksResp).Result == "success" {
+			return nil
+		} else {
+			return fmt.Errorf(ret.(*AddBlocksResp).Error)
+		}
+	default:
+		return fmt.Errorf("convert outChan fail")
+	}
+}
+
+// AddBlock send a block bitswap msg to node with copyNum and nodeList
+func (bs *Bitswap) AddBlocks(ctx context.Context, to string, blk []blocks.Block, copyNum int32, nodeList []string) (interface{}, error) {
+	id, err := peer.IDB58Decode(to)
+	if err != nil {
+		return nil, err
+	}
+	msg := bsmsg.New(true)
+	msg.SetMessageType(MSG_TYPE_ADDBLOCKS)
+	for _, b := range blk {
+		msg.AddBlock(b)
+	}
+	if copyNum > 0 {
+		msg.SetBackup(copyNum, nodeList)
+	}
+	err = bs.network.SendMessage(ctx, id, msg)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		timeout := maxAddBlocksTimeout * len(blk)
+		if copyNum > 0 {
+			timeout *= int(copyNum)
+		}
+		<-time.After(time.Duration(timeout) * time.Second)
+		bs.outChan <- &AddBlocksResp{
+			Result: "fail",
+			Error:  "wait for response timeout",
+		}
+	}()
+	ret := <-bs.outChan
+	switch ret.(type) {
+	case *AddBlocksResp:
+		if ret.(*AddBlocksResp).Result == "success" {
+			return ret.(*AddBlocksResp).Copy, nil
+		} else {
+			return nil, fmt.Errorf(ret.(*AddBlocksResp).Error)
+		}
+	default:
+		return nil, fmt.Errorf("convert outChan fail")
+	}
+}
+
+// handlePreAddblocksResp handle the response msg of preaddblocks
+func (bs *Bitswap) handlePreAddblocksResp(ctx context.Context, p peer.ID, incoming bsmsg.BitSwapMessage) {
+	var resp AddBlocksResp
+	err := json.Unmarshal(incoming.Response(), &resp)
+	if err != nil {
+		log.Errorf("json unmarshal response failed:%s", err)
+		return
+	}
+	bs.outChan <- &resp
+}
+
+// handleAddblocksResp handle the response msg of addblocks
+func (bs *Bitswap) handleAddblocksResp(ctx context.Context, p peer.ID, incoming bsmsg.BitSwapMessage) {
+	var resp AddBlocksResp
+	err := json.Unmarshal(incoming.Response(), &resp)
+	if err != nil {
+		log.Errorf("json unmarshal response failed:%s", err)
+		return
+	}
+	bs.outChan <- &resp
 }
