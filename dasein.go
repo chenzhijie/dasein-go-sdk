@@ -15,7 +15,7 @@ import (
 	"github.com/daseinio/dasein-go-sdk/importer/helpers"
 	"github.com/daseinio/dasein-go-sdk/importer/trickle"
 	ml "github.com/daseinio/dasein-go-sdk/merkledag"
-	ftpb "github.com/ipfs/go-ipfs/unixfs/pb"
+	ftpb "github.com/daseinio/dasein-go-sdk/unixfs/pb"
 	chunker "gx/ipfs/QmWo8jYc19ppG7YoTsrr2kEtLRbARTJho5oNXFTR6B7Peq/go-ipfs-chunker"
 	"gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/proto"
 	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"

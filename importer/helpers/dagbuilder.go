@@ -6,7 +6,7 @@ import (
 	"os"
 
 	dag "github.com/daseinio/dasein-go-sdk/merkledag"
-	ft "github.com/ipfs/go-ipfs/unixfs"
+	ft "github.com/daseinio/dasein-go-sdk/unixfs"
 
 	chunker "gx/ipfs/QmWo8jYc19ppG7YoTsrr2kEtLRbARTJho5oNXFTR6B7Peq/go-ipfs-chunker"
 	cid "gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
