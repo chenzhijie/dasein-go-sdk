@@ -5,10 +5,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+
 	"github.com/daseinio/dasein-go-sdk/repo"
 	cfg "github.com/daseinio/dasein-go-sdk/repo/config"
-	"os"
-	"syscall"
 
 	"gx/ipfs/QmRg1gKTHzc3CZXSKzem8aR4E3TubFhbgXwfVuWnSK5CC5/go-metrics-interface"
 	"gx/ipfs/QmSF8fPo3jgVBAy8fpdjjYqgG87dkJgUprRBHRd2tmfgpP/goprocess/context"
@@ -18,6 +17,8 @@ import (
 	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
 	ci "gx/ipfs/QmaPbCnUMBohSGo3KnxEa2bHqyJVVeEEcwtqJAYxerieBo/go-libp2p-crypto"
 )
+
+var local, server string
 
 type BuildCfg struct {
 	// ExtraOpts is a map of extra options used to configure the ipfs nodes creation
@@ -90,8 +91,10 @@ func defaultRepo(dstore repo.Datastore) (repo.Repo, error) {
 		return nil, err
 	}
 
-	c.Bootstrap = cfg.DefaultBootstrapAddresses
-	c.Addresses.Swarm = []string{"/ip4/0.0.0.0/tcp/4001"}
+	c.Bootstrap = []string{
+		server,
+	}
+	c.Addresses.Swarm = []string{local}
 	c.Identity.PeerID = pid.Pretty()
 	c.Identity.PrivKey = base64.StdEncoding.EncodeToString(privkeyb)
 
@@ -102,9 +105,13 @@ func defaultRepo(dstore repo.Datastore) (repo.Repo, error) {
 }
 
 // NewNode constructs and returns an IpfsNode using the given cfg.
-func NewNode(ctx context.Context, cfg *BuildCfg) (*IpfsNode, error) {
-	if cfg == nil {
-		cfg = new(BuildCfg)
+func NewNode(ctx context.Context) (*IpfsNode, error) {
+	cfg := &BuildCfg{
+		Repo:      nil,
+		Permanent: true, // It is temporary way to signify that node is permanent
+		ExtraOpts: map[string]bool{
+			"mplex": false,
+		},
 	}
 
 	err := cfg.fillDefaults()
@@ -131,15 +138,6 @@ func NewNode(ctx context.Context, cfg *BuildCfg) (*IpfsNode, error) {
 	return n, nil
 }
 
-func isTooManyFDError(err error) bool {
-	perr, ok := err.(*os.PathError)
-	if ok && perr.Err == syscall.EMFILE {
-		return true
-	}
-
-	return false
-}
-
 func setupNode(ctx context.Context, n *IpfsNode, cfg *BuildCfg) error {
 	// setup local peer ID (private key is loaded in online setup)
 	if err := n.loadID(); err != nil {
@@ -157,4 +155,9 @@ func setupNode(ctx context.Context, n *IpfsNode, cfg *BuildCfg) error {
 	}
 
 	return nil
+}
+
+func InitParam(localAddr string, serverAddr string){
+	local = localAddr
+	server = serverAddr
 }

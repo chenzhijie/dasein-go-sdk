@@ -152,7 +152,26 @@ func (n *IpfsNode) startOnlineServices(ctx context.Context, routingOption Routin
 
 	tpt := makeSmuxTransport(false)
 
-	swarmkey, err := n.Repo.SwarmKey()
+	//swarmkey, err := n.Repo.SwarmKey()
+	SwarmKey := func()([]byte, error) {
+
+		spath := "/Users/ggxxjj123/ipfs_test/ipfs2/swarm.key"
+		f, err := os.Open(spath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, nil
+			} else {
+				return nil, err
+			}
+		}
+		defer f.Close()
+		if err != nil {
+			return nil, err
+		}
+		return ioutil.ReadAll(f)
+	}
+
+	swarmkey, err := SwarmKey()
 	if err != nil {
 		return err
 	}

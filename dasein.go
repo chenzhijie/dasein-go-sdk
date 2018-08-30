@@ -15,40 +15,27 @@ import (
 	"github.com/daseinio/dasein-go-sdk/importer/helpers"
 	"github.com/daseinio/dasein-go-sdk/importer/trickle"
 	ml "github.com/daseinio/dasein-go-sdk/merkledag"
-	"github.com/daseinio/dasein-go-sdk/repo/fsrepo"
 	ftpb "github.com/ipfs/go-ipfs/unixfs/pb"
-
 	chunker "gx/ipfs/QmWo8jYc19ppG7YoTsrr2kEtLRbARTJho5oNXFTR6B7Peq/go-ipfs-chunker"
 	"gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/proto"
-	peer "gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
+	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
 	mh "gx/ipfs/QmZyZDi491cCNTLfAhwcaDii2Kg4pwKRkhqQzURGDvY6ua/go-multihash"
 	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 	ipld "gx/ipfs/Qme5bWv7wtjUNGsK2BNGVUFPKiuxWrsqrtvYwCLRw8YFES/go-ipld-format"
 )
 
-var repo = "/Users/ggxxjj123/ipfs_test/ipfs2"
-
-// var repo = "/Users/zhijie/Desktop/onchain/ipfs-test/ipfs/node2"
-
 type Client struct {
 	node *core.IpfsNode
 }
 
+func Init(addr string, server string) {
+	core.InitParam(addr, server)
+}
+
 func NewClient() (*Client, error) {
 	client := &Client{nil}
-	repo, err := fsrepo.Open(repo)
-	if err != nil {
-		fmt.Printf(err.Error())
-	}
-
-	nCfg := &core.BuildCfg{
-		Repo:      repo,
-		Permanent: true, // It is temporary way to signify that node is permanent
-		ExtraOpts: map[string]bool{
-			"mplex": false,
-		},
-	}
-	client.node, err = core.NewNode(context.TODO(), nCfg)
+	var err error
+	client.node, err = core.NewNode(context.TODO())
 	return client, err
 }
 
