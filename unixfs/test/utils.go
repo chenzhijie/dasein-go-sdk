@@ -1,23 +1,15 @@
 package testu
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
-	"testing"
-
-	h "github.com/daseinio/dasein-go-sdk/importer/helpers"
-	trickle "github.com/daseinio/dasein-go-sdk/importer/trickle"
 	mdag "github.com/daseinio/dasein-go-sdk/merkledag"
-	mdagmock "github.com/daseinio/dasein-go-sdk/merkledag/test"
 	ft "github.com/daseinio/dasein-go-sdk/unixfs"
 
-	u "gx/ipfs/QmNiJuT8Ja3hMVpBHXv3Q6dwmperaQ6JjLtpMQgMCD7xvx/go-ipfs-util"
 	chunker "gx/ipfs/QmWo8jYc19ppG7YoTsrr2kEtLRbARTJho5oNXFTR6B7Peq/go-ipfs-chunker"
 	mh "gx/ipfs/QmZyZDi491cCNTLfAhwcaDii2Kg4pwKRkhqQzURGDvY6ua/go-multihash"
-	cid "gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
+	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 	ipld "gx/ipfs/Qme5bWv7wtjUNGsK2BNGVUFPKiuxWrsqrtvYwCLRw8YFES/go-ipld-format"
 )
 
@@ -26,11 +18,6 @@ func SizeSplitterGen(size int64) chunker.SplitterGen {
 	return func(r io.Reader) chunker.Splitter {
 		return chunker.NewSizeSplitter(r, size)
 	}
-}
-
-// GetDAGServ returns a mock DAGService.
-func GetDAGServ() ipld.DAGService {
-	return mdagmock.Mock()
 }
 
 // NodeOpts is used by GetNode, GetEmptyNode and GetRandomNode
@@ -54,42 +41,6 @@ func init() {
 	UseBlake2b256 = UseCidV1
 	UseBlake2b256.Prefix.MhType = mh.Names["blake2b-256"]
 	UseBlake2b256.Prefix.MhLength = -1
-}
-
-// GetNode returns a unixfs file node with the specified data.
-func GetNode(t testing.TB, dserv ipld.DAGService, data []byte, opts NodeOpts) ipld.Node {
-	in := bytes.NewReader(data)
-
-	dbp := h.DagBuilderParams{
-		Dagserv:   dserv,
-		Maxlinks:  h.DefaultLinksPerBlock,
-		Prefix:    &opts.Prefix,
-		RawLeaves: opts.RawLeavesUsed,
-	}
-
-	node, err := trickle.Layout(dbp.New(SizeSplitterGen(500)(in)))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return node
-}
-
-// GetEmptyNode returns an empty unixfs file node.
-func GetEmptyNode(t testing.TB, dserv ipld.DAGService, opts NodeOpts) ipld.Node {
-	return GetNode(t, dserv, []byte{}, opts)
-}
-
-// GetRandomNode returns a random unixfs file node.
-func GetRandomNode(t testing.TB, dserv ipld.DAGService, size int64, opts NodeOpts) ([]byte, ipld.Node) {
-	in := io.LimitReader(u.NewTimeSeededRand(), size)
-	buf, err := ioutil.ReadAll(in)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	node := GetNode(t, dserv, buf, opts)
-	return buf, node
 }
 
 // ArrComp checks if two byte slices are the same.

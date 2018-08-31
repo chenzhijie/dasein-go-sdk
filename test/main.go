@@ -54,7 +54,7 @@ func testSendFile() {
 	}
 	defer bigF.Close()
 
-	for i := 1; i < 40000; i++ {
+	for i := 1; i < 80000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 

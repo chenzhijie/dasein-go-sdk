@@ -2,11 +2,9 @@ package merkledag_test
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	. "github.com/daseinio/dasein-go-sdk/merkledag"
-	mdtest "github.com/daseinio/dasein-go-sdk/merkledag/test"
 
 	ipld "gx/ipfs/Qme5bWv7wtjUNGsK2BNGVUFPKiuxWrsqrtvYwCLRw8YFES/go-ipld-format"
 )
@@ -56,64 +54,6 @@ func TestRemoveLink(t *testing.T) {
 
 	if nd.Links()[1].Name != "c" {
 		t.Fatal("link order wrong")
-	}
-}
-
-func TestFindLink(t *testing.T) {
-	ctx := context.Background()
-
-	ds := mdtest.Mock()
-	ndEmpty := new(ProtoNode)
-	err := ds.Add(ctx, ndEmpty)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	kEmpty := ndEmpty.Cid()
-
-	nd := &ProtoNode{}
-	nd.SetLinks([]*ipld.Link{
-		{Name: "a", Cid: kEmpty},
-		{Name: "c", Cid: kEmpty},
-		{Name: "b", Cid: kEmpty},
-	})
-
-	err = ds.Add(ctx, nd)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	lnk, err := nd.GetNodeLink("b")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if lnk.Name != "b" {
-		t.Fatal("got wrong link back")
-	}
-
-	_, err = nd.GetNodeLink("f")
-	if err != ErrLinkNotFound {
-		t.Fatal("shouldnt have found link")
-	}
-
-	_, err = nd.GetLinkedNode(context.Background(), ds, "b")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	outnd, err := nd.UpdateNodeLink("b", nd)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	olnk, err := outnd.GetNodeLink("b")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if olnk.Cid.String() == kEmpty.String() {
-		t.Fatal("new link should have different hash")
 	}
 }
 
