@@ -5,7 +5,6 @@ Packages underneath core/ provide a (relatively) stable, low-level API
 to carry out most IPFS-related tasks.  For more details on the other
 interfaces and how core/... fits into the bigger IPFS picture, see:
 
-  $ godoc github.com/ipfs/go-ipfs
 */
 package core
 
@@ -26,7 +25,6 @@ import (
 	ex "github.com/daseinio/dasein-go-sdk/exchange_interface"
 	"github.com/daseinio/dasein-go-sdk/repo"
 	"github.com/daseinio/dasein-go-sdk/repo/config"
-	"github.com/ipfs/go-ipfs/p2p"
 
 	"gx/ipfs/QmNSWW3Sb4eju4o2djPQ1L1c2Zj9XN9sMYJL8r1cbxdc6b/go-addr-util"
 	yamux "gx/ipfs/QmNWCEvi7bPRcvqAV8AKLGVNoQdArWi7NJayka2SM4XtRe/go-smux-yamux"
@@ -110,7 +108,6 @@ type IpfsNode struct {
 	Ping *ping.PingService
 
 	Floodsub *floodsub.PubSub
-	P2P      *p2p.P2P
 
 	proc goprocess.Process
 	ctx  context.Context
@@ -229,8 +226,6 @@ func (n *IpfsNode) startOnlineServices(ctx context.Context, routingOption Routin
 	if err := n.startOnlineServicesWithHost(ctx, peerhost, routingOption); err != nil {
 		return err
 	}
-
-	n.P2P = p2p.NewP2P(n.Identity, n.PeerHost, n.Peerstore)
 
 	// setup local discovery
 	if do != nil {

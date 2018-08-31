@@ -7,21 +7,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
-	"github.com/daseinio/dasein-go-sdk/bitswap/decision"
 	bsmsg "github.com/daseinio/dasein-go-sdk/bitswap/message"
 	bsnet "github.com/daseinio/dasein-go-sdk/bitswap/network"
-	"github.com/daseinio/dasein-go-sdk/bitswap/notifications"
 	ex "github.com/daseinio/dasein-go-sdk/exchange_interface"
 
 	"gx/ipfs/QmRJVNatYJwTAHgdSM1Xef9QVQ1Ch3XHdmcrykjP5Y4soL/go-ipfs-delay"
-	"gx/ipfs/QmRMGdC6HKdLsPDABL9aXPDidrpmEHzJqFWSvshkbn9Hj8/go-ipfs-flags"
 	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
-	"gx/ipfs/QmRg1gKTHzc3CZXSKzem8aR4E3TubFhbgXwfVuWnSK5CC5/go-metrics-interface"
 	process "gx/ipfs/QmSF8fPo3jgVBAy8fpdjjYqgG87dkJgUprRBHRd2tmfgpP/goprocess"
-	procctx "gx/ipfs/QmSF8fPo3jgVBAy8fpdjjYqgG87dkJgUprRBHRd2tmfgpP/goprocess/context"
 	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
 	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 	"gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
@@ -30,39 +24,15 @@ import (
 var log = logging.Logger("bitswap")
 
 const (
-	// maxProvidersPerRequest specifies the maximum number of providers desired
-	// from the network. This value is specified because the network streams
-	// results.
-	// TODO: if a 'non-nice' strategy is implemented, consider increasing this value
-	maxProvidersPerRequest = 3
-	providerRequestTimeout = time.Second * 10
-	provideTimeout         = time.Second * 15
-	sizeBatchRequestChan   = 32
-	// kMaxPriority is the max priority as defined by the bitswap protocol
 	kMaxPriority = math.MaxInt32
 )
 
 var (
-	HasBlockBufferSize    = 256
-	provideKeysBufferSize = 2048
-	provideWorkerMax      = 512
-
-	// the 1<<18+15 is to observe old file chunks that are 1<<18 + 14 in size
-	metricsBuckets = []float64{1 << 6, 1 << 10, 1 << 14, 1 << 18, 1<<18 + 15, 1 << 22}
-
 	outChanBufferSize      = 10 // receive msg channel size
 	maxPreAddBlocksTimeout = 10 // recive pre addblocks timeout in second
 	maxAddBlocksTimeout    = 10 // recive addblocks timeout in second * 1CopyNum * 1Block
 	maxGetBlocksTimeout    = 10 // recive getblocks timeout in second
 )
-
-func init() {
-	if flags.LowMemMode {
-		HasBlockBufferSize = 64
-		provideKeysBufferSize = 512
-		provideWorkerMax = 16
-	}
-}
 
 var rebroadcastDelay = delay.Fixed(time.Minute)
 
@@ -96,83 +66,24 @@ type GetBlocksResp struct {
 	Error  string               `json:"error"`  // Error message
 }
 
-
 // New initializes a BitSwap instance that communicates over the provided
 // BitSwapNetwork. This function registers the returned instance as the network
 // delegate.
 // Runs until context is cancelled.
 func New(parent context.Context, network bsnet.BitSwapNetwork) ex.Exchange {
-
-	// important to use provided parent context (since it may include important
-	// loggable data). It's probably not a good idea to allow bitswap to be
-	// coupled to the concerns of the ipfs daemon in this way.
-	//
-	// FIXME(btc) Now that bitswap manages itself using a process, it probably
-	// shouldn't accept a context anymore. Clients should probably use Close()
-	// exclusively. We should probably find another way to share logging data
-	ctx, cancelFunc := context.WithCancel(parent)
-	ctx = metrics.CtxSubScope(ctx, "bitswap")
-	dupHist := metrics.NewCtx(ctx, "recv_dup_blocks_bytes", "Summary of duplicate"+
-		" data blocks recived").Histogram(metricsBuckets)
-	allHist := metrics.NewCtx(ctx, "recv_all_blocks_bytes", "Summary of all"+
-		" data blocks recived").Histogram(metricsBuckets)
-
-	notif := notifications.New()
-	px := process.WithTeardown(func() error {
-		notif.Shutdown()
-		return nil
-	})
-
 	bs := &Bitswap{
-		notifications: notif,
-		engine:        decision.NewEngine(ctx), // TODO close the engine with Close() method
 		network:       network,
-		findKeys:      make(chan *blockRequest, sizeBatchRequestChan),
-		process:       px,
-		newBlocks:     make(chan *cid.Cid, HasBlockBufferSize),
-		provideKeys:   make(chan *cid.Cid, provideKeysBufferSize),
-		wm:            NewWantManager(ctx, network),
-		counters:      new(counters),
-
-		dupMetric: dupHist,
-		allMetric: allHist,
 		outChan:   make(chan interface{}, outChanBufferSize),
 	}
-	go bs.wm.Run()
 	network.SetDelegate(bs)
-
-	// Start up bitswaps async worker routines
-	bs.startWorkers(px, ctx)
-
-	// bind the context and process.
-	// do it over here to avoid closing before all setup is done.
-	go func() {
-		<-px.Closing() // process closes first
-		cancelFunc()
-	}()
-	procctx.CloseAfterContext(px, ctx) // parent cancelled first
-
 	return bs
 }
 
 // Bitswap instances implement the bitswap protocol.
 type Bitswap struct {
-	// the peermanager manages sending messages to peers in a way that
-	// wont block bitswap operation
-	wm *WantManager
-
-	// the engine is the bit of logic that decides who to send which blocks to
-	engine *decision.Engine
-
 	// network delivers messages on behalf of the session
 	network bsnet.BitSwapNetwork
 
-	// notifications engine for receiving new blocks and routing them to the
-	// appropriate user requests
-	notifications notifications.PubSub
-
-	// findKeys sends keys to a worker to find and connect to providers for them
-	findKeys chan *blockRequest
 	// newBlocks is a channel for newly added blocks to be provided to the
 	// network.  blocks pushed down this channel get buffered and fed to the
 	// provideKeys channel later on to avoid too much network activity
@@ -182,53 +93,7 @@ type Bitswap struct {
 
 	process process.Process
 
-	// Counters for various statistics
-	counterLk sync.Mutex
-	counters  *counters
-
-	// Metrics interface metrics
-	dupMetric metrics.Histogram
-	allMetric metrics.Histogram
-
-	// Sessions
-	sessions []*Session
-	sessLk   sync.Mutex
-
-	sessID   uint64
-	sessIDLk sync.Mutex
-
 	outChan chan interface{}
-}
-
-type counters struct {
-	blocksRecvd    uint64
-	dupBlocksRecvd uint64
-	dupDataRecvd   uint64
-	blocksSent     uint64
-	dataSent       uint64
-	dataRecvd      uint64
-	messagesRecvd  uint64
-}
-
-type blockRequest struct {
-	Cid *cid.Cid
-	Ctx context.Context
-}
-
-
-func (bs *Bitswap) getNextSessionID() uint64 {
-	bs.sessIDLk.Lock()
-	defer bs.sessIDLk.Unlock()
-	bs.sessID++
-	return bs.sessID
-}
-
-// CancelWant removes a given key from the wantlist
-func (bs *Bitswap) CancelWants(cids []*cid.Cid, ses uint64) {
-	if len(cids) == 0 {
-		return
-	}
-	bs.wm.CancelWants(context.Background(), cids, nil, ses)
 }
 
 // DelBlock deletes a given key from the wantlist
@@ -261,16 +126,10 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 }
 
 // Connected/Disconnected warns bitswap about peer connections
-func (bs *Bitswap) PeerConnected(p peer.ID) {
-	bs.wm.Connected(p)
-	bs.engine.PeerConnected(p)
-}
+func (bs *Bitswap) PeerConnected(p peer.ID) {}
 
 // Connected/Disconnected warns bitswap about peer connections
-func (bs *Bitswap) PeerDisconnected(p peer.ID) {
-	bs.wm.Disconnected(p)
-	bs.engine.PeerDisconnected(p)
-}
+func (bs *Bitswap) PeerDisconnected(p peer.ID) {}
 
 func (bs *Bitswap) ReceiveError(err error) {
 	log.Infof("Bitswap ReceiveError: %s", err)
@@ -280,15 +139,6 @@ func (bs *Bitswap) ReceiveError(err error) {
 
 func (bs *Bitswap) Close() error {
 	return bs.process.Close()
-}
-
-func (bs *Bitswap) GetWantlist() []*cid.Cid {
-	entries := bs.wm.wl.Entries()
-	out := make([]*cid.Cid, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, e.Cid)
-	}
-	return out
 }
 
 func (bs *Bitswap) IsOnline() bool {
