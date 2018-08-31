@@ -46,12 +46,12 @@ func NewClient() (*Client, error) {
 	return client, err
 }
 
-func (c *Client) GetData(cidString string) ([]byte, error) {
+func (c *Client) GetData(cidString string, from string) ([]byte, error) {
 	CID, err := cid.Decode(cidString)
 	if err != nil {
 		return nil, err
 	}
-	return c.decodeBlock(CID)
+	return c.decodeBlock(CID, from)
 }
 
 func (c *Client) DelData(cidString string, from string) error {
@@ -152,14 +152,14 @@ func (c *Client) SendFile(fileName string, to string, copyNum int32, nodeList []
 	return nil
 }
 
-func (c *Client) decodeBlock(CID *cid.Cid) ([]byte, error) {
+func (c *Client) decodeBlock(CID *cid.Cid, from string) ([]byte, error) {
 	var buf bytes.Buffer
-	block, err := c.node.Exchange.GetBlock(context.Background(), CID)
+	blocks, err := c.node.Exchange.GetBlocks(context.Background(), from, CID)
 	if err != nil {
 		return nil, err
 	}
 
-	dagNode, err := ml.DecodeProtobufBlock(block)
+	dagNode, err := ml.DecodeProtobufBlock(blocks[0])
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (c *Client) decodeBlock(CID *cid.Cid) ([]byte, error) {
 		}
 	} else {
 		for i := 0; i < linksNum; i++ {
-			childBuf, err := c.decodeBlock(dagNode.Links()[i].Cid)
+			childBuf, err := c.decodeBlock(dagNode.Links()[i].Cid, from)
 			if err != nil {
 				return nil, err
 			}

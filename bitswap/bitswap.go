@@ -5,11 +5,9 @@ package bitswap
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/daseinio/dasein-go-sdk/bitswap/decision"
@@ -27,6 +25,7 @@ import (
 	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
 	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 	"gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
+	"reflect"
 )
 
 var log = logging.Logger("bitswap")
@@ -55,6 +54,7 @@ var (
 	outChanBufferSize      = 10 // receive msg channel size
 	maxPreAddBlocksTimeout = 10 // recive pre addblocks timeout in second
 	maxAddBlocksTimeout    = 10 // recive addblocks timeout in second * 1CopyNum * 1Block
+	maxGetBlocksTimeout    = 10 // recive getblocks timeout in second
 )
 
 func init() {
@@ -90,6 +90,13 @@ type AddBlocksResp struct {
 	Error  string               `json:"error"`  // Error message
 	Copy   map[string]CopyState `json:"copy"`   // Copy state
 }
+
+// GetBlocksResp used for set in bitswap message response
+type GetBlocksResp struct {
+	Result string               `json:"result"` // Result: success / fail
+	Error  string               `json:"error"`  // Error message
+}
+
 
 // New initializes a BitSwap instance that communicates over the provided
 // BitSwapNetwork. This function registers the returned instance as the network
@@ -209,103 +216,6 @@ type blockRequest struct {
 	Ctx context.Context
 }
 
-// GetBlock attempts to retrieve a particular block from peers within the
-// deadline enforced by the context.
-func (bs *Bitswap) GetBlock(parent context.Context, k *cid.Cid) (blocks.Block, error) {
-	return getBlock(parent, k, bs.GetBlocks)
-}
-
-func (bs *Bitswap) WantlistForPeer(p peer.ID) []*cid.Cid {
-	var out []*cid.Cid
-	for _, e := range bs.engine.WantlistForPeer(p) {
-		out = append(out, e.Cid)
-	}
-	return out
-}
-
-func (bs *Bitswap) LedgerForPeer(p peer.ID) *decision.Receipt {
-	return bs.engine.LedgerForPeer(p)
-}
-
-// GetBlocks returns a channel where the caller may receive blocks that
-// correspond to the provided |keys|. Returns an error if BitSwap is unable to
-// begin this request within the deadline enforced by the context.
-//
-// NB: Your request remains open until the context expires. To conserve
-// resources, provide a context with a reasonably short deadline (ie. not one
-// that lasts throughout the lifetime of the server)
-func (bs *Bitswap) GetBlocks(ctx context.Context, keys []*cid.Cid) (<-chan blocks.Block, error) {
-	if len(keys) == 0 {
-		out := make(chan blocks.Block)
-		close(out)
-		return out, nil
-	}
-
-	select {
-	case <-bs.process.Closing():
-		return nil, errors.New("bitswap is closed")
-	default:
-	}
-	promise := bs.notifications.Subscribe(ctx, keys...)
-
-	for _, k := range keys {
-		fmt.Println("Bitswap.GetBlockRequest.Start", k)
-		log.Event(ctx, "Bitswap.GetBlockRequest.Start", k)
-	}
-
-	mses := bs.getNextSessionID()
-
-	bs.wm.WantBlocks(ctx, keys, nil, mses)
-
-	// NB: Optimization. Assumes that providers of key[0] are likely to
-	// be able to provide for all keys. This currently holds true in most
-	// every situation. Later, this assumption may not hold as true.
-	req := &blockRequest{
-		Cid: keys[0],
-		Ctx: ctx,
-	}
-
-	remaining := cid.NewSet()
-	for _, k := range keys {
-		remaining.Add(k)
-	}
-
-	out := make(chan blocks.Block)
-	go func() {
-		ctx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		defer close(out)
-		defer func() {
-			// can't just defer this call on its own, arguments are resolved *when* the defer is created
-			bs.CancelWants(remaining.Keys(), mses)
-		}()
-		for {
-			select {
-			case blk, ok := <-promise:
-				if !ok {
-					return
-				}
-
-				bs.CancelWants([]*cid.Cid{blk.Cid()}, mses)
-				remaining.Remove(blk.Cid())
-				select {
-				case out <- blk:
-				case <-ctx.Done():
-					return
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	select {
-	case bs.findKeys <- req:
-		return out, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
 
 func (bs *Bitswap) getNextSessionID() uint64 {
 	bs.sessIDLk.Lock()
@@ -331,7 +241,6 @@ func (bs *Bitswap) DelBlock(ctx context.Context, cid *cid.Cid) error {
 	if err != nil {
 		return err
 	}
-
 	return bs.network.SendMessage(context.TODO(), id, msg)
 }
 
@@ -350,63 +259,6 @@ func (bs *Bitswap) DelBlocks(ctx context.Context, cids []*cid.Cid) error {
 	return bs.network.SendMessage(context.TODO(), id, msg)
 }
 
-// HasBlock announces the existence of a block to this bitswap service. The
-// service will potentially notify its peers.
-func (bs *Bitswap) HasBlock(blk blocks.Block) error {
-	return bs.receiveBlockFrom(blk, "")
-}
-
-// TODO: Some of this stuff really only needs to be done when adding a block
-// from the user, not when receiving it from the network.
-// In case you run `git blame` on this comment, I'll save you some time: ask
-// @whyrusleeping, I don't know the answers you seek.
-func (bs *Bitswap) receiveBlockFrom(blk blocks.Block, from peer.ID) error {
-	select {
-	case <-bs.process.Closing():
-		return errors.New("bitswap is closed")
-	default:
-	}
-	fmt.Println("Block Cid: ", blk.Cid().String())
-
-	// NOTE: There exists the possiblity for a race condition here.  If a user
-	// creates a node, then adds it to the dagservice while another goroutine
-	// is waiting on a GetBlock for that object, they will receive a reference
-	// to the same node. We should address this soon, but i'm not going to do
-	// it now as it requires more thought and isnt causing immediate problems.
-	bs.notifications.Publish(blk)
-
-	k := blk.Cid()
-	ks := []*cid.Cid{k}
-	for _, s := range bs.SessionsForBlock(k) {
-		s.receiveBlockFrom(from, blk)
-		bs.CancelWants(ks, s.id)
-	}
-
-	bs.engine.AddBlock(blk)
-
-	select {
-	case bs.newBlocks <- blk.Cid():
-		// send block off to be reprovided
-	case <-bs.process.Closing():
-		return bs.process.Close()
-	}
-	return nil
-}
-
-// SessionsForBlock returns a slice of all sessions that may be interested in the given cid
-func (bs *Bitswap) SessionsForBlock(c *cid.Cid) []*Session {
-	bs.sessLk.Lock()
-	defer bs.sessLk.Unlock()
-
-	var out []*Session
-	for _, s := range bs.sessions {
-		if s.interestedIn(c) {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
 func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg.BitSwapMessage) {
 	switch incoming.MessageType() {
 	case MSG_TYPE_PREADDBLOCKSRESP:
@@ -416,53 +268,8 @@ func (bs *Bitswap) ReceiveMessage(ctx context.Context, p peer.ID, incoming bsmsg
 		bs.handleAddblocksResp(ctx, p, incoming)
 		return
 	default:
+		bs.handleGetblockResp(ctx, p, incoming)
 	}
-
-	atomic.AddUint64(&bs.counters.messagesRecvd, 1)
-
-	// This call records changes to wantlists, blocks received,
-	// and number of bytes transfered.
-	//bs.engine.MessageReceived(p, incoming)
-	// TODO: this is bad, and could be easily abused.
-	// Should only track *useful* messages in ledger
-
-	iblocks := incoming.Blocks()
-
-	if len(iblocks) == 0 {
-		return
-	}
-
-	wg := sync.WaitGroup{}
-	for _, block := range iblocks {
-		wg.Add(1)
-		go func(b blocks.Block) { // TODO: this probably doesnt need to be a goroutine...
-			defer wg.Done()
-
-			bs.updateReceiveCounters(b)
-
-			log.Debugf("got block %s from %s", b, p)
-			if err := bs.receiveBlockFrom(b, p); err != nil {
-				log.Warningf("ReceiveMessage recvBlockFrom error: %s", err)
-			}
-			log.Event(ctx, "Bitswap.GetBlockRequest.End", b.Cid())
-		}(block)
-	}
-	wg.Wait()
-}
-
-var ErrAlreadyHaveBlock = errors.New("already have block")
-
-func (bs *Bitswap) updateReceiveCounters(b blocks.Block) {
-	blkLen := len(b.RawData())
-
-	bs.allMetric.Observe(float64(blkLen))
-
-	bs.counterLk.Lock()
-	defer bs.counterLk.Unlock()
-	c := bs.counters
-
-	c.blocksRecvd++
-	c.dataRecvd += uint64(len(b.RawData()))
 }
 
 // Connected/Disconnected warns bitswap about peer connections
@@ -537,6 +344,39 @@ func (bs *Bitswap) PreAddBlocks(ctx context.Context, to string, cids []*cid.Cid,
 	}
 }
 
+func (bs *Bitswap) GetBlocks(ctx context.Context, to string, key *cid.Cid) ([]blocks.Block, error) {
+	id, err := peer.IDB58Decode(to)
+	if err != nil {
+		return nil, err
+	}
+	msg := bsmsg.New(true)
+	msg.AddEntry(key, kMaxPriority)
+	err = bs.network.SendMessage(ctx, id, msg)
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		timeout := maxGetBlocksTimeout
+		<-time.After(time.Duration(timeout) * time.Second)
+		bs.outChan <- &GetBlocksResp{
+			Result: "fail",
+			Error:  "wait for response timeout",
+		}
+	}()
+
+	ret := <-bs.outChan
+	fmt.Println(reflect.TypeOf(ret).String())
+
+	switch ret.(type) {
+	case []blocks.Block:
+		return ret.([]blocks.Block), nil
+	case *GetBlocksResp:
+		return nil, fmt.Errorf("wait for response timeout")
+	default:
+		return nil, fmt.Errorf("convert outChan fail")
+	}
+}
+
 // AddBlock send a block bitswap msg to node with copyNum and nodeList
 func (bs *Bitswap) AddBlocks(ctx context.Context, to string, blk []blocks.Block, copyNum int32, nodeList []string) (interface{}, error) {
 	id, err := peer.IDB58Decode(to)
@@ -579,8 +419,17 @@ func (bs *Bitswap) AddBlocks(ctx context.Context, to string, blk []blocks.Block,
 	}
 }
 
-// handlePreAddblocksResp handle the response msg of preaddblocks
-func (bs *Bitswap) handlePreAddblocksResp(ctx context.Context, p peer.ID, incoming bsmsg.BitSwapMessage) {
+// handleGetblocksResp handle the response msg of getblock
+func (bs *Bitswap) handleGetblockResp(ctx context.Context, p peer.ID, incoming bsmsg.BitSwapMessage) {
+	iblocks := incoming.Blocks()
+	if len(iblocks) == 0 {
+		return
+	}
+	bs.outChan <- iblocks
+}
+
+// handleAddblocksResp handle the response msg of addblocks
+func (bs *Bitswap) handleAddblocksResp(ctx context.Context, p peer.ID, incoming bsmsg.BitSwapMessage) {
 	var resp AddBlocksResp
 	err := json.Unmarshal(incoming.Response(), &resp)
 	if err != nil {
@@ -590,8 +439,8 @@ func (bs *Bitswap) handlePreAddblocksResp(ctx context.Context, p peer.ID, incomi
 	bs.outChan <- &resp
 }
 
-// handleAddblocksResp handle the response msg of addblocks
-func (bs *Bitswap) handleAddblocksResp(ctx context.Context, p peer.ID, incoming bsmsg.BitSwapMessage) {
+// handlePreAddblocksResp handle the response msg of preaddblocks
+func (bs *Bitswap) handlePreAddblocksResp(ctx context.Context, p peer.ID, incoming bsmsg.BitSwapMessage) {
 	var resp AddBlocksResp
 	err := json.Unmarshal(incoming.Response(), &resp)
 	if err != nil {

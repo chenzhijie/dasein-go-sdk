@@ -9,20 +9,16 @@ import (
 
 // Interface defines the functionality of the IPFS block exchange protocol.
 type Exchange interface { // type Exchanger interface
-	GetBlock(context.Context, *cid.Cid) (blocks.Block, error)
-	GetBlocks(context.Context, []*cid.Cid) (<-chan blocks.Block, error)
+	GetBlocks(ctx context.Context, to string, key *cid.Cid) ([]blocks.Block, error)
 
 	DelBlock(context.Context, *cid.Cid) error
 	DelBlocks(context.Context, []*cid.Cid) error
 
-	// TODO Should callers be concerned with whether the block was made
-	// available on the network?
-	HasBlock(blocks.Block) error
-
+	PreAddBlocks(context.Context, string, []*cid.Cid, int32, []string) error
+	AddBlocks(context.Context, string, []blocks.Block, int32, []string) (interface{}, error)
 	IsOnline() bool
 
 	io.Closer
 
-	PreAddBlocks(context.Context, string, []*cid.Cid, int32, []string) error
-	AddBlocks(context.Context, string, []blocks.Block, int32, []string) (interface{}, error)
+
 }

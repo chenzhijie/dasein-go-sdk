@@ -5,7 +5,6 @@ import (
 	"os"
 
 	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
-
 	sdk "github.com/daseinio/dasein-go-sdk"
 )
 
@@ -15,8 +14,8 @@ var bigTxt = "QmW5CME8vkw3ndeuDuf5a5oL9x55yPWfhF4fz4R6XTMTBk"
 //var largeTxt = "QmU7QRQpSZhukKsraEaa23Re1AzLqpFvyHPwayseVKTbFp"
 var deleteTxt = "QmevhnWdtmz89BMXuuX5pSY2uZtqKLz7frJsrCojT5kmb6"
 
-// var server = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
-var server = "/ip4/127.0.0.1/tcp/4001/ipfs/QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng"
+ var server = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
+//var server = "/ip4/127.0.0.1/tcp/4001/ipfs/QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng"
 
 var log = logging.Logger("test")
 
@@ -81,11 +80,11 @@ func testGetData() {
 
 	log.Info("-----------------------")
 	log.Info("Single Block Test")
-	data, err := client.GetData(smallTxt)
+	data, err := client.GetData(smallTxt, "QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
 	if err != nil {
 		log.Error(err)
 	}
-
+	log.Info("GetData: \n", string(data))
 	file, err := os.Create("small")
 	if err != nil {
 		log.Error(err)
@@ -95,10 +94,10 @@ func testGetData() {
 		log.Error(err)
 	}
 	file.Close()
-
+/*
 	log.Info("-----------------------")
 	log.Info("Multi Block Test")
-	data, err = client.GetData(bigTxt)
+	data, err = client.GetData(bigTxt, "QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
 	if err != nil {
 		log.Error(err)
 	}
@@ -111,7 +110,7 @@ func testGetData() {
 	if err != nil {
 		log.Error(err)
 	}
-	file.Close()
+	file.Close()*/
 
 	log.Info("-----------------------")
 	log.Info("Delete Block Test")
@@ -145,6 +144,6 @@ func main() {
 	logging.SetLogLevel("test", "INFO")
 	// logging.SetLogLevel("bitswap", "INFO")
 	logging.SetLogLevel("daseingosdk", "INFO")
-	// testGetData()
-	testSendFile()
+	testGetData()
+	//testSendFile()
 }
