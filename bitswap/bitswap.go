@@ -25,7 +25,6 @@ import (
 	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
 	"gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
 	"gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
-	"reflect"
 )
 
 var log = logging.Logger("bitswap")
@@ -233,29 +232,18 @@ func (bs *Bitswap) CancelWants(cids []*cid.Cid, ses uint64) {
 }
 
 // DelBlock deletes a given key from the wantlist
-func (bs *Bitswap) DelBlock(ctx context.Context, cid *cid.Cid) error {
+func (bs *Bitswap) DelBlock(ctx context.Context, id peer.ID, cid *cid.Cid) error {
 	msg := bsmsg.New(true)
 	msg.Delete(cid)
-
-	id, err := peer.IDB58Decode("QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
-	if err != nil {
-		return err
-	}
 	return bs.network.SendMessage(context.TODO(), id, msg)
 }
 
 // DelBlocks deletes given keys from the wantlist
-func (bs *Bitswap) DelBlocks(ctx context.Context, cids []*cid.Cid) error {
+func (bs *Bitswap) DelBlocks(ctx context.Context, id peer.ID, cids []*cid.Cid) error {
 	msg := bsmsg.New(true)
 	for _, cid := range cids {
 		msg.Delete(cid)
 	}
-
-	id, err := peer.IDB58Decode("QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
-	if err != nil {
-		return err
-	}
-
 	return bs.network.SendMessage(context.TODO(), id, msg)
 }
 
@@ -308,18 +296,14 @@ func (bs *Bitswap) IsOnline() bool {
 }
 
 // PreAddBlocks send preaddblocks msg to check the node state
-func (bs *Bitswap) PreAddBlocks(ctx context.Context, to string, cids []*cid.Cid, copyNum int32, nodeList []string) error {
-	id, err := peer.IDB58Decode(to)
-	if err != nil {
-		return err
-	}
+func (bs *Bitswap) PreAddBlocks(ctx context.Context, id peer.ID, cids []*cid.Cid, copyNum int32, nodeList []string) error {
 	msg := bsmsg.New(true)
 	for _, cid := range cids {
 		msg.AddLink(cid.String())
 	}
 	msg.SetMessageType(MSG_TYPE_PREADDBLOCKS)
 	msg.SetBackup(copyNum, nodeList)
-	err = bs.network.SendMessage(ctx, id, msg)
+	err := bs.network.SendMessage(ctx, id, msg)
 	if err != nil {
 		log.Errorf("pre add blocks err:%s", err)
 		return err
@@ -344,14 +328,10 @@ func (bs *Bitswap) PreAddBlocks(ctx context.Context, to string, cids []*cid.Cid,
 	}
 }
 
-func (bs *Bitswap) GetBlocks(ctx context.Context, to string, key *cid.Cid) ([]blocks.Block, error) {
-	id, err := peer.IDB58Decode(to)
-	if err != nil {
-		return nil, err
-	}
+func (bs *Bitswap) GetBlocks(ctx context.Context, id peer.ID, key *cid.Cid) ([]blocks.Block, error) {
 	msg := bsmsg.New(true)
 	msg.AddEntry(key, kMaxPriority)
-	err = bs.network.SendMessage(ctx, id, msg)
+	err := bs.network.SendMessage(ctx, id, msg)
 	if err != nil {
 		return nil, err
 	}
@@ -365,8 +345,6 @@ func (bs *Bitswap) GetBlocks(ctx context.Context, to string, key *cid.Cid) ([]bl
 	}()
 
 	ret := <-bs.outChan
-	fmt.Println(reflect.TypeOf(ret).String())
-
 	switch ret.(type) {
 	case []blocks.Block:
 		return ret.([]blocks.Block), nil
@@ -378,11 +356,7 @@ func (bs *Bitswap) GetBlocks(ctx context.Context, to string, key *cid.Cid) ([]bl
 }
 
 // AddBlock send a block bitswap msg to node with copyNum and nodeList
-func (bs *Bitswap) AddBlocks(ctx context.Context, to string, blk []blocks.Block, copyNum int32, nodeList []string) (interface{}, error) {
-	id, err := peer.IDB58Decode(to)
-	if err != nil {
-		return nil, err
-	}
+func (bs *Bitswap) AddBlocks(ctx context.Context, id peer.ID, blk []blocks.Block, copyNum int32, nodeList []string) (interface{}, error) {
 	msg := bsmsg.New(true)
 	msg.SetMessageType(MSG_TYPE_ADDBLOCKS)
 	for _, b := range blk {
@@ -391,7 +365,7 @@ func (bs *Bitswap) AddBlocks(ctx context.Context, to string, blk []blocks.Block,
 	if copyNum > 0 {
 		msg.SetBackup(copyNum, nodeList)
 	}
-	err = bs.network.SendMessage(ctx, id, msg)
+	err := bs.network.SendMessage(ctx, id, msg)
 	if err != nil {
 		return nil, err
 	}

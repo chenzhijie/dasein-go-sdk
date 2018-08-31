@@ -3,7 +3,6 @@ package dasein_go_sdk
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -23,6 +22,7 @@ import (
 	"github.com/daseinio/dasein-go-sdk/importer/trickle"
 	ml "github.com/daseinio/dasein-go-sdk/merkledag"
 	ftpb "github.com/daseinio/dasein-go-sdk/unixfs/pb"
+	"github.com/daseinio/dasein-go-sdk/repo/config"
 )
 
 var log = logging.Logger("daseingosdk")
@@ -33,46 +33,37 @@ const (
 
 type Client struct {
 	node *core.IpfsNode
+	peer config.BootstrapPeer
 }
 
-func Init(server string) {
-	core.InitParam(server)
-}
-
-func NewClient() (*Client, error) {
-	client := &Client{nil}
+func NewClient(server string) (*Client, error) {
 	var err error
+	client := &Client{}
+
+	core.InitParam(server)
 	client.node, err = core.NewNode(context.TODO())
+	client.peer, err = config.ParseBootstrapPeer(server)
 	return client, err
 }
 
-func (c *Client) GetData(cidString string, from string) ([]byte, error) {
+func (c *Client) GetData(cidString string) ([]byte, error) {
 	CID, err := cid.Decode(cidString)
 	if err != nil {
 		return nil, err
 	}
-	return c.decodeBlock(CID, from)
+	return c.decodeBlock(CID, c.peer.ID())
 }
 
-func (c *Client) DelData(cidString string, from string) error {
-	id, err := peer.IDB58Decode(from)
-	if err != nil {
-		return err
-	}
-	pi := c.node.Peerstore.PeerInfo(id)
-	if len(pi.Addrs) == 0 {
-		return fmt.Errorf("peer not found")
-	}
-
+func (c *Client) DelData(cidString string) error {
 	CID, err := cid.Decode(cidString)
 	if err != nil {
 		return err
 	}
-	return c.node.Exchange.DelBlock(context.Background(), CID)
+	return c.node.Exchange.DelBlock(context.Background(), c.peer.ID(), CID)
 }
 
 // PreSendFile send file information to node for checking the storage requirement
-func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, to string, copyNum int32, nodeList []string) error {
+func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, copyNum int32, nodeList []string) error {
 	cids := make([]*cid.Cid, 0)
 	cids = append(cids, root.Cid())
 	for _, node := range list {
@@ -81,24 +72,15 @@ func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, to stri
 			cids = append(cids, dagNode.Cid())
 		}
 	}
-	return c.node.Exchange.PreAddBlocks(context.Background(), to, cids, copyNum, nodeList)
+	return c.node.Exchange.PreAddBlocks(context.Background(), c.peer.ID(), cids, copyNum, nodeList)
 }
 
 // SendFile send a file to node with copy number
-func (c *Client) SendFile(fileName string, to string, copyNum int32, nodeList []string) error {
+func (c *Client) SendFile(fileName string, copyNum int32, nodeList []string) error {
 	// blocks size in one msg
 	blockSizePerMsg := 2
 	if blockSizePerMsg > MAX_ADD_BLOCKS_SIZE {
 		blockSizePerMsg = MAX_ADD_BLOCKS_SIZE
-	}
-
-	id, err := peer.IDB58Decode(to)
-	if err != nil {
-		return err
-	}
-	pi := c.node.Peerstore.PeerInfo(id)
-	if len(pi.Addrs) == 0 {
-		return fmt.Errorf("peer not found")
 	}
 	root, list, err := nodesFromFile(fileName)
 	if err != nil {
@@ -106,7 +88,7 @@ func (c *Client) SendFile(fileName string, to string, copyNum int32, nodeList []
 	}
 
 	if copyNum > 0 {
-		err = c.PreSendFile(root, list, to, copyNum, nodeList)
+		err = c.PreSendFile(root, list, copyNum, nodeList)
 		if err != nil {
 			log.Errorf("pre send file failed :%s", err)
 			return err
@@ -115,7 +97,7 @@ func (c *Client) SendFile(fileName string, to string, copyNum int32, nodeList []
 	}
 
 	// send root node
-	ret, err := c.node.Exchange.AddBlocks(context.Background(), to, []blocks.Block{root}, copyNum, nodeList)
+	ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), []blocks.Block{root}, copyNum, nodeList)
 	if err != nil {
 		return err
 	}
@@ -132,7 +114,7 @@ func (c *Client) SendFile(fileName string, to string, copyNum int32, nodeList []
 			// send others
 			others = append(others, dagNode)
 			if len(others) >= blockSizePerMsg || i == len(list)-1 {
-				ret, err := c.node.Exchange.AddBlocks(context.Background(), to, others, copyNum, nodeList)
+				ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), others, copyNum, nodeList)
 				if err != nil {
 					return err
 				}
@@ -152,9 +134,9 @@ func (c *Client) SendFile(fileName string, to string, copyNum int32, nodeList []
 	return nil
 }
 
-func (c *Client) decodeBlock(CID *cid.Cid, from string) ([]byte, error) {
+func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID) ([]byte, error) {
 	var buf bytes.Buffer
-	blocks, err := c.node.Exchange.GetBlocks(context.Background(), from, CID)
+	blocks, err := c.node.Exchange.GetBlocks(context.Background(), peerId, CID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +158,7 @@ func (c *Client) decodeBlock(CID *cid.Cid, from string) ([]byte, error) {
 		}
 	} else {
 		for i := 0; i < linksNum; i++ {
-			childBuf, err := c.decodeBlock(dagNode.Links()[i].Cid, from)
+			childBuf, err := c.decodeBlock(dagNode.Links()[i].Cid, peerId)
 			if err != nil {
 				return nil, err
 			}

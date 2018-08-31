@@ -10,19 +10,19 @@ import (
 
 var smallTxt = "QmfWAu8auG7NdzVyUAeb1PU5uUs5W3DrCWhMk6B1iCsnvk"
 var bigTxt = "QmW5CME8vkw3ndeuDuf5a5oL9x55yPWfhF4fz4R6XTMTBk"
-
 //var largeTxt = "QmU7QRQpSZhukKsraEaa23Re1AzLqpFvyHPwayseVKTbFp"
 var deleteTxt = "QmevhnWdtmz89BMXuuX5pSY2uZtqKLz7frJsrCojT5kmb6"
 
- var server = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
-//var server = "/ip4/127.0.0.1/tcp/4001/ipfs/QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng"
+ var node = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
+//var node = "/ip4/127.0.0.1/tcp/4001/ipfs/QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng"
 
 var log = logging.Logger("test")
 
 func testSendFile() {
+	log.Info("-----------------------")
+	log.Info("Send Block Test")
 
-	sdk.Init(server)
-	client, err := sdk.NewClient()
+	client, err := sdk.NewClient(node)
 	if err != nil {
 		log.Error(err)
 		return
@@ -35,7 +35,7 @@ func testSendFile() {
 	// }
 	// defer smallF.Close()
 	// smallF.WriteString("hello world\n")
-	// err = client.SendFile(smallFile, "QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng", 2, []string{"Qme2Z9M2FTAyJPDk4BVn2dCv1PoCq4xgsjZDimZKxYyVki", "QmZQgmCeAuFSuxLmbcxLxyXAngKAfcFYzyyuvgQbqVWB9n"})
+	// err = client.SendFile(smallFile, 2, []string{"Qme2Z9M2FTAyJPDk4BVn2dCv1PoCq4xgsjZDimZKxYyVki", "QmZQgmCeAuFSuxLmbcxLxyXAngKAfcFYzyyuvgQbqVWB9n"})
 	// if err != nil {
 	// 	log.Error(err)
 	// 	return
@@ -58,7 +58,7 @@ func testSendFile() {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 
-	err = client.SendFile(bigFile, "QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng", 2, []string{"Qme2Z9M2FTAyJPDk4BVn2dCv1PoCq4xgsjZDimZKxYyVki", "QmZQgmCeAuFSuxLmbcxLxyXAngKAfcFYzyyuvgQbqVWB9n"})
+	err = client.SendFile(bigFile,0, []string{"Qme2Z9M2FTAyJPDk4BVn2dCv1PoCq4xgsjZDimZKxYyVki", "QmZQgmCeAuFSuxLmbcxLxyXAngKAfcFYzyyuvgQbqVWB9n"})
 	if err != nil {
 		log.Error(err)
 		return
@@ -71,8 +71,7 @@ func testSendFile() {
 }
 
 func testGetData() {
-	sdk.Init(server)
-	client, err := sdk.NewClient()
+	client, err := sdk.NewClient(node)
 	if err != nil {
 		log.Error(err)
 		return
@@ -80,24 +79,25 @@ func testGetData() {
 
 	log.Info("-----------------------")
 	log.Info("Single Block Test")
-	data, err := client.GetData(smallTxt, "QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
+	data, err := client.GetData(smallTxt)
 	if err != nil {
 		log.Error(err)
 	}
-	log.Info("GetData: \n", string(data))
 	file, err := os.Create("small")
 	if err != nil {
 		log.Error(err)
+	} else {
+		log.Infof("GetData %s success", smallTxt)
 	}
 	_, err = file.Write(data)
 	if err != nil {
 		log.Error(err)
 	}
 	file.Close()
-/*
+
 	log.Info("-----------------------")
 	log.Info("Multi Block Test")
-	data, err = client.GetData(bigTxt, "QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
+	data, err = client.GetData(bigTxt)
 	if err != nil {
 		log.Error(err)
 	}
@@ -110,15 +110,15 @@ func testGetData() {
 	if err != nil {
 		log.Error(err)
 	}
-	file.Close()*/
+	file.Close()
 
 	log.Info("-----------------------")
 	log.Info("Delete Block Test")
-	err = client.DelData(deleteTxt, "QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB")
+	err = client.DelData(deleteTxt)
 	if err != nil {
 		log.Error(err)
 	} else {
-		log.Infof("Delete %s success", deleteTxt)
+		log.Infof("DelData %s success", deleteTxt)
 	}
 
 	/*
@@ -145,5 +145,5 @@ func main() {
 	// logging.SetLogLevel("bitswap", "INFO")
 	logging.SetLogLevel("daseingosdk", "INFO")
 	testGetData()
-	//testSendFile()
+	testSendFile()
 }
