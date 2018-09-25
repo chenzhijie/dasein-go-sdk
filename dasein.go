@@ -18,6 +18,7 @@ import (
 	ipld "gx/ipfs/Qme5bWv7wtjUNGsK2BNGVUFPKiuxWrsqrtvYwCLRw8YFES/go-ipld-format"
 	"gx/ipfs/Qmej7nf81hi2x2tvjRBF3mcp74sQyuDH4VMYDGd1YtXjb2/go-block-format"
 
+	"github.com/daseinio/dasein-go-PoR/PoR"
 	"github.com/daseinio/dasein-go-sdk/core"
 	"github.com/daseinio/dasein-go-sdk/crypto"
 	"github.com/daseinio/dasein-go-sdk/importer/balanced"
@@ -108,11 +109,16 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 	if !exist {
 		return fmt.Errorf("peer is not alive:%s", c.peer.ID())
 	}
-	nodeList = append(nodeList[:0], nodeList[1:]...)
 
+	peer := peer.IDB58Encode(c.peer.ID())
+	for i, n := range nodeList {
+		if n == peer {
+			nodeList = append(nodeList[:i], nodeList[i+1:]...)
+			break
+		}
+	}
 	// split file to blocks
 	root, list, err := nodesFromFile(fileName, encrypt, password)
-	fmt.Printf("nodeList:%v, root:%v, list:%d\n", nodeList, root, len(list))
 	if err != nil {
 		return err
 	}
@@ -123,6 +129,9 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 		return err
 	}
 
+	g, g0, pubKey, privKey, fileID, r, pairing := PoR.Init(fileName)
+	log.Infof("g:%d, g0:%v, pk:%d, prik:%d", len(g), len(g0), len(pubKey), len(privKey))
+	var rawTxId []byte
 	if !isPaid {
 		blockSize, err := root.Size()
 		if err != nil || blockSize == 0 {
@@ -139,26 +148,29 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 			BlockNum:       uint64(len(list)),
 			BlockSize:      blockSizeInKB,
 		}
-		rawTxId, err := PayStoreFile(storeFileInfo, c.wallet, password, c.rpc)
+		rawTxId, err = PayStoreFile(storeFileInfo, c.wallet, password, c.rpc)
 		if err != nil {
 			log.Errorf("pay store file order failed:%s", err)
 			return err
 		}
-		log.Infof("pay store file success:%x", rawTxId)
 	} else {
-		log.Infof("file:%s already paied", root.Cid().String())
 	}
-	// if copyNum > 0 {
 	err = c.PreSendFile(root, list, copyNum, nodeList)
 	if err != nil {
 		log.Errorf("pre send file failed :%s", err)
 		return err
 	}
-	log.Infof("pre add blocks success")
-	// }
+	// index of root tag start from 1
+	tag, err := PoR.SignGenerate(root.RawData(), fileID, r, 1, pairing, g0, privKey)
+	if err != nil {
+		log.Errorf("generate root tag failed:%s", err)
+		return err
+	}
+	log.Infof("root tag:%d", len(tag))
 
 	// send root node
-	ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), []blocks.Block{root}, copyNum, nodeList)
+	ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), []blocks.Block{root}, []int32{0}, [][]byte{tag}, copyNum, nodeList)
+	log.Infof("add root file to:%s ret:%v, err:%s", c.peer.ID(), ret, err)
 	if err != nil {
 		return err
 	}
@@ -174,30 +186,45 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 	if blockSizePerMsg > MAX_ADD_BLOCKS_SIZE {
 		blockSizePerMsg = MAX_ADD_BLOCKS_SIZE
 	}
-	others := make([]blocks.Block, 0)
+	otherBlks := make([]blocks.Block, 0)
+	otherIndxs := make([]int32, 0)
+	otherTags := make([][]byte, 0)
+	index := int32(0)
 	for i, node := range list {
 		dagNode, _ := node.GetDagNode()
 		if dagNode.Cid().String() != root.Cid().String() {
+			index++
 			// send others
-			others = append(others, dagNode)
-			if len(others) >= blockSizePerMsg || i == len(list)-1 {
-				ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), others, copyNum, nodeList)
+			otherBlks = append(otherBlks, dagNode)
+			otherIndxs = append(otherIndxs, index)
+			tag, err := PoR.SignGenerate(dagNode.RawData(), fileID, r, uint32(index+1), pairing, g0, privKey)
+			if err != nil {
+				log.Errorf("generate %d tag failed:%s", index+1, err)
+				return err
+			}
+			otherTags = append(otherTags, tag)
+			log.Debugf("index:%v", otherIndxs)
+			if len(otherBlks) >= blockSizePerMsg || i == len(list)-1 {
+				ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), otherBlks, otherIndxs, otherTags, copyNum, nodeList)
 				if err != nil {
 					return err
 				}
-				for _, sent := range others {
+				for _, sent := range otherBlks {
 					if copyNum > 0 {
-						log.Infof("send %s success, size:%d, result:%v", sent.Cid(), len(sent.RawData()), ret)
+						log.Debugf("send %s success, size:%d, result:%v", sent.Cid(), len(sent.RawData()), ret)
 					} else {
-						log.Infof("send %s success, size:%d", sent.Cid(), len(sent.RawData()))
+						log.Debugf("send %s success, size:%d", sent.Cid(), len(sent.RawData()))
 					}
 				}
 				//clean slice
-				others = others[:0]
+				otherBlks = otherBlks[:0]
+				otherIndxs = otherIndxs[:0]
+				otherTags = otherTags[:0]
 			}
 		} else {
 		}
 	}
+	log.Infof("File have stored: %s, Hash:%x", root.Cid().String(), rawTxId)
 	return nil
 }
 

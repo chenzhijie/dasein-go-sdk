@@ -148,7 +148,9 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 		m.AddBlock(blk)
 	}
 	m.SetMessageType(pbm.GetMessageType())
-	m.SetBackup(pbm.GetBackup().GetCopynum(), pbm.GetBackup().GetNodelist())
+	if pbm.GetBackup().GetCopynum() > 0 {
+		m.SetBackup(pbm.GetBackup().GetCopynum(), pbm.GetBackup().GetNodelist())
+	}
 	if len(pbm.GetLinks()) > 0 {
 		m.links = pbm.GetLinks()
 	}

@@ -42,7 +42,7 @@ func testSendSmallFile() {
 	}
 	defer smallF.Close()
 	smallF.WriteString("hello world22\n")
-	err = client.SendFile(smallFile, 1, 1, 1, 1, encrypt, password)
+	err = client.SendFile(smallFile, 1, 1, 1, 0, encrypt, password)
 	if err != nil {
 		log.Error(err)
 		return
@@ -72,9 +72,9 @@ func testSendBigFile() {
 	for i := 1; i < 30000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
-	err = client.SendFile(bigFile, 1, 1, 1, 0, encrypt, password)
+	err = client.SendFile(bigFile, 1, 1, 1, 1, encrypt, password)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("send file err:%s", err)
 		return
 	}
 	err = os.Remove(bigFile)
@@ -157,7 +157,7 @@ func testGetData() {
 }
 
 func testGetNodeList() {
-	l, err := sdk.GetNodeList(0, 0, wallet, walletPwd, rpc)
+	l, err := sdk.GetNodeList(0, 1, wallet, walletPwd, rpc)
 	if err != nil {
 		log.Error(err)
 	}
@@ -193,8 +193,8 @@ func testStoreFile() {
 
 func main() {
 	logging.SetLogLevel("test", "INFO")
-	// logging.SetLogLevel("bitswap", "INFO")
 	logging.SetLogLevel("daseingosdk", "INFO")
 	// testGetData()
-	testSendBigFile()
+	testSendSmallFile()
+	// testGetNodeList()
 }

@@ -29,7 +29,7 @@ const (
 
 var (
 	outChanBufferSize      = 10 // receive msg channel size
-	maxPreAddBlocksTimeout = 10 // recive pre addblocks timeout in second
+	maxPreAddBlocksTimeout = 30 // recive pre addblocks timeout in second
 	maxAddBlocksTimeout    = 10 // recive addblocks timeout in second * 1CopyNum * 1Block
 	maxGetBlocksTimeout    = 10 // recive getblocks timeout in second
 )
@@ -152,7 +152,9 @@ func (bs *Bitswap) PreAddBlocks(ctx context.Context, id peer.ID, fileHash string
 		msg.AddLink(cid.String())
 	}
 	msg.SetMessageType(MSG_TYPE_PREADDBLOCKS)
-	msg.SetBackup(copyNum, nodeList)
+	if copyNum > 0 {
+		msg.SetBackup(copyNum, nodeList)
+	}
 	msg.SetFileHash(fileHash)
 	err := bs.network.SendMessage(ctx, id, msg)
 	if err != nil {
@@ -207,12 +209,23 @@ func (bs *Bitswap) GetBlocks(ctx context.Context, id peer.ID, key *cid.Cid) ([]b
 }
 
 // AddBlock send a block bitswap msg to node with copyNum and nodeList
-func (bs *Bitswap) AddBlocks(ctx context.Context, id peer.ID, fileHash string, blk []blocks.Block, copyNum int32, nodeList []string) (interface{}, error) {
+func (bs *Bitswap) AddBlocks(ctx context.Context, id peer.ID, fileHash string, blk []blocks.Block, blkIndex []int32, tags [][]byte, copyNum int32, nodeList []string) (interface{}, error) {
+	if len(blk) != len(blkIndex) || len(blk) != len(tags) {
+		return nil, fmt.Errorf("blk.len != blkIndex.len")
+	}
 	msg := bsmsg.New(true)
 	msg.SetMessageType(MSG_TYPE_ADDBLOCKS)
 	msg.SetFileHash(fileHash)
 	for _, b := range blk {
 		msg.AddBlock(b)
+	}
+	for i, index := range blkIndex {
+		tagPack := &bsmsg.Tagpack{
+			Index: index,
+			Hash:  blk[i].Cid().String(),
+			Tag:   tags[i],
+		}
+		msg.AddTagPack(tagPack)
 	}
 	if copyNum > 0 {
 		msg.SetBackup(copyNum, nodeList)

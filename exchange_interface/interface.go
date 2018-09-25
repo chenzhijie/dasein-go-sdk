@@ -16,7 +16,7 @@ type Exchange interface { // type Exchanger interface
 	DelBlocks(context.Context, peer.ID, []*cid.Cid) error
 
 	PreAddBlocks(context.Context, peer.ID, string, []*cid.Cid, int32, []string) error
-	AddBlocks(context.Context, peer.ID, string, []blocks.Block, int32, []string) (interface{}, error)
+	AddBlocks(context.Context, peer.ID, string, []blocks.Block, []int32, [][]byte, int32, []string) (interface{}, error)
 	IsOnline() bool
 
 	io.Closer
