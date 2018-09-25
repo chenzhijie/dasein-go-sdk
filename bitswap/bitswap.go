@@ -62,8 +62,8 @@ type AddBlocksResp struct {
 
 // GetBlocksResp used for set in bitswap message response
 type GetBlocksResp struct {
-	Result string               `json:"result"` // Result: success / fail
-	Error  string               `json:"error"`  // Error message
+	Result string `json:"result"` // Result: success / fail
+	Error  string `json:"error"`  // Error message
 }
 
 // New initializes a BitSwap instance that communicates over the provided
@@ -72,8 +72,8 @@ type GetBlocksResp struct {
 // Runs until context is cancelled.
 func New(parent context.Context, network bsnet.BitSwapNetwork) ex.Exchange {
 	bs := &Bitswap{
-		network:       network,
-		outChan:   make(chan interface{}, outChanBufferSize),
+		network: network,
+		outChan: make(chan interface{}, outChanBufferSize),
 	}
 	network.SetDelegate(bs)
 	return bs
@@ -146,13 +146,14 @@ func (bs *Bitswap) IsOnline() bool {
 }
 
 // PreAddBlocks send preaddblocks msg to check the node state
-func (bs *Bitswap) PreAddBlocks(ctx context.Context, id peer.ID, cids []*cid.Cid, copyNum int32, nodeList []string) error {
+func (bs *Bitswap) PreAddBlocks(ctx context.Context, id peer.ID, fileHash string, cids []*cid.Cid, copyNum int32, nodeList []string) error {
 	msg := bsmsg.New(true)
 	for _, cid := range cids {
 		msg.AddLink(cid.String())
 	}
 	msg.SetMessageType(MSG_TYPE_PREADDBLOCKS)
 	msg.SetBackup(copyNum, nodeList)
+	msg.SetFileHash(fileHash)
 	err := bs.network.SendMessage(ctx, id, msg)
 	if err != nil {
 		log.Errorf("pre add blocks err:%s", err)
@@ -206,9 +207,10 @@ func (bs *Bitswap) GetBlocks(ctx context.Context, id peer.ID, key *cid.Cid) ([]b
 }
 
 // AddBlock send a block bitswap msg to node with copyNum and nodeList
-func (bs *Bitswap) AddBlocks(ctx context.Context, id peer.ID, blk []blocks.Block, copyNum int32, nodeList []string) (interface{}, error) {
+func (bs *Bitswap) AddBlocks(ctx context.Context, id peer.ID, fileHash string, blk []blocks.Block, copyNum int32, nodeList []string) (interface{}, error) {
 	msg := bsmsg.New(true)
 	msg.SetMessageType(MSG_TYPE_ADDBLOCKS)
+	msg.SetFileHash(fileHash)
 	for _, b := range blk {
 		msg.AddBlock(b)
 	}

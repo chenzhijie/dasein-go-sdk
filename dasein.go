@@ -81,7 +81,7 @@ func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, copyNum
 			cids = append(cids, dagNode.Cid())
 		}
 	}
-	return c.node.Exchange.PreAddBlocks(context.Background(), c.peer.ID(), cids, copyNum, nodeList)
+	return c.node.Exchange.PreAddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), cids, copyNum, nodeList)
 }
 
 // SendFile send a file to node with copy number
@@ -112,6 +112,7 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 
 	// split file to blocks
 	root, list, err := nodesFromFile(fileName, encrypt, password)
+	fmt.Printf("nodeList:%v, root:%v, list:%d\n", nodeList, root, len(list))
 	if err != nil {
 		return err
 	}
@@ -135,10 +136,9 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 			ChallengeRate:  challengeRate,
 			ChallengeTimes: challengeTimes,
 			CopyNum:        uint64(copyNum),
-			BlockNum:       uint64(len(list) + 1),
+			BlockNum:       uint64(len(list)),
 			BlockSize:      blockSizeInKB,
 		}
-		log.Infof("store file info :%v", storeFileInfo)
 		rawTxId, err := PayStoreFile(storeFileInfo, c.wallet, password, c.rpc)
 		if err != nil {
 			log.Errorf("pay store file order failed:%s", err)
@@ -148,18 +148,17 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 	} else {
 		log.Infof("file:%s already paied", root.Cid().String())
 	}
-
-	if copyNum > 0 {
-		err = c.PreSendFile(root, list, copyNum, nodeList)
-		if err != nil {
-			log.Errorf("pre send file failed :%s", err)
-			return err
-		}
-		log.Infof("pre add blocks success")
+	// if copyNum > 0 {
+	err = c.PreSendFile(root, list, copyNum, nodeList)
+	if err != nil {
+		log.Errorf("pre send file failed :%s", err)
+		return err
 	}
+	log.Infof("pre add blocks success")
+	// }
 
 	// send root node
-	ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), []blocks.Block{root}, copyNum, nodeList)
+	ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), []blocks.Block{root}, copyNum, nodeList)
 	if err != nil {
 		return err
 	}
@@ -171,7 +170,7 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 
 	// send rest nodes
 	// blocks size in one msg
-	blockSizePerMsg := 2
+	blockSizePerMsg := 1
 	if blockSizePerMsg > MAX_ADD_BLOCKS_SIZE {
 		blockSizePerMsg = MAX_ADD_BLOCKS_SIZE
 	}
@@ -182,7 +181,7 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 			// send others
 			others = append(others, dagNode)
 			if len(others) >= blockSizePerMsg || i == len(list)-1 {
-				ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), others, copyNum, nodeList)
+				ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), others, copyNum, nodeList)
 				if err != nil {
 					return err
 				}
@@ -192,11 +191,11 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 					} else {
 						log.Infof("send %s success, size:%d", sent.Cid(), len(sent.RawData()))
 					}
-
 				}
 				//clean slice
 				others = others[:0]
 			}
+		} else {
 		}
 	}
 	return nil
@@ -249,6 +248,7 @@ func (c *Client) isPeerAlive(idStr peer.ID) (bool, error) {
 }
 
 // nodesFromFile open a local file and build dag nodes
+// return root, list, list include root node
 func nodesFromFile(fileName string, encrypt bool, password string) (ipld.Node, []*helpers.UnixfsNode, error) {
 	cidVer := 0
 	hashFunStr := "sha2-256"

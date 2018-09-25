@@ -56,7 +56,8 @@ func PayStoreFile(info *StoreFileInfo, wallet, password, rpcSvrAddr string) ([]b
 	if client == nil {
 		return nil, errors.New("client is nil")
 	}
-	return client.StoreFile(info.FileHashStr, info.KeepHours, info.BlockNum, info.BlockSize, info.ChallengeRate, info.ChallengeTimes, info.CopyNum)
+	proveBufs := make([]byte, 0)
+	return client.StoreFile(info.FileHashStr, info.KeepHours, info.BlockNum, info.BlockSize, info.ChallengeRate, info.ChallengeTimes, info.CopyNum, proveBufs)
 }
 
 func IsFilePaid(fileHashStr string, wallet, password, rpcSvrAddr string) (bool, error) {

@@ -64,6 +64,14 @@ type BitSwapMessage interface {
 	SetResponse([]byte)
 
 	Response() []byte
+
+	SetFileHash(string)
+
+	FileHash() string
+
+	AddTagPack(*Tagpack)
+
+	TagPacks() []*Tagpack
 }
 
 type Exportable interface {
@@ -81,6 +89,8 @@ type impl struct {
 	backup   *Backup
 	links    []string
 	resp     []byte
+	fileHash string
+	tagPacks []*Tagpack
 }
 
 func New(full bool) BitSwapMessage {
@@ -92,6 +102,7 @@ func newMsg(full bool) *impl {
 		blocks:   make(map[string]blocks.Block),
 		wantlist: make(map[string]*Entry),
 		full:     full,
+		tagPacks: make([]*Tagpack, 0),
 	}
 }
 
@@ -143,6 +154,15 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 	}
 	if len(pbm.GetResponse()) > 0 {
 		m.resp = pbm.GetResponse()
+	}
+	m.SetFileHash(pbm.GetFileHash())
+	for _, tag := range pbm.GetTagPacks() {
+		tagPack := &Tagpack{
+			Index: tag.GetIndex(),
+			Hash:  tag.GetHash(),
+			Tag:   tag.GetTag(),
+		}
+		m.AddTagPack(tagPack)
 	}
 	return m, nil
 }
@@ -252,6 +272,18 @@ func (m *impl) ToProtoV0() *pb.Message {
 		pbm.Response = make([]byte, 0)
 		pbm.Response = append(pbm.Response, m.resp...)
 	}
+
+	pbm.FileHash = proto.String(m.fileHash)
+	if len(m.tagPacks) > 0 {
+		pbm.TagPacks = make([]*pb.Message_Tagpack, 0)
+		for _, tagPack := range m.tagPacks {
+			tp := new(pb.Message_Tagpack)
+			tp.Index = proto.Int32(tagPack.Index)
+			tp.Hash = proto.String(tagPack.Hash)
+			tp.Tag = tagPack.Tag
+			pbm.TagPacks = append(pbm.TagPacks, tp)
+		}
+	}
 	return pbm
 }
 
@@ -291,6 +323,17 @@ func (m *impl) ToProtoV1() *pb.Message {
 	if len(m.resp) > 0 {
 		pbm.Response = make([]byte, 0)
 		pbm.Response = append(pbm.Response, m.resp...)
+	}
+	pbm.FileHash = proto.String(m.fileHash)
+	if len(m.tagPacks) > 0 {
+		pbm.TagPacks = make([]*pb.Message_Tagpack, 0)
+		for _, tagPack := range m.tagPacks {
+			tp := new(pb.Message_Tagpack)
+			tp.Index = proto.Int32(tagPack.Index)
+			tp.Hash = proto.String(tagPack.Hash)
+			tp.Tag = tagPack.Tag
+			pbm.TagPacks = append(pbm.TagPacks, tp)
+		}
 	}
 	return pbm
 }
@@ -362,4 +405,26 @@ func (m *impl) SetResponse(r []byte) {
 
 func (m *impl) Response() []byte {
 	return m.resp
+}
+
+func (m *impl) SetFileHash(fileHash string) {
+	m.fileHash = fileHash
+}
+
+func (m *impl) FileHash() string {
+	return m.fileHash
+}
+
+type Tagpack struct {
+	Index int32
+	Hash  string
+	Tag   []byte
+}
+
+func (m *impl) AddTagPack(tagpack *Tagpack) {
+	m.tagPacks = append(m.tagPacks, tagpack)
+}
+
+func (m *impl) TagPacks() []*Tagpack {
+	return m.tagPacks
 }

@@ -24,6 +24,13 @@ message Message {
     repeated string nodelist = 2; // the dst node list for copy
   }
 
+
+  message Tagpack {
+    optional int32 index = 1;
+    optional string hash = 2;
+    optional bytes tag = 3;
+  }
+
   optional Wantlist wantlist = 1;
   repeated bytes blocks = 2;		   // used to send Blocks in bitswap 1.0.0
   repeated Block payload = 3;		   // used to send Blocks in bitswap 1.1.0
@@ -32,5 +39,6 @@ message Message {
   optional Backup backup = 5;      // used to send backup blocks
   repeated string links = 6;       // used to send all node links for a file
   optional bytes  response = 7;    // response result 
-  
+   optional string fileHash = 8;    // file hash
+  repeated Tagpack tagPacks = 9;       // tag packet, correspond to with blocks
 }

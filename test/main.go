@@ -18,7 +18,7 @@ var deleteTxt = "QmevhnWdtmz89BMXuuX5pSY2uZtqKLz7frJsrCojT5kmb6"
 
 // var node = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
 
-var node = "/ip4/127.0.0.1/tcp/4001/ipfs/QmTj2ccSejD8eiGj5xEwhEtzkwUvAik1iaQMCheUNQiEng"
+var node = "/ip4/127.0.0.1/tcp/4001/ipfs/Qmdkh8dBb8p99KGDhazTnNZJpM4hDx95NJtnSLGSKp5tTy"
 
 var log = logging.Logger("test")
 
@@ -41,8 +41,8 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("hello world\n")
-	err = client.SendFile(smallFile, 1, 1, 1, 0, encrypt, password)
+	smallF.WriteString("hello world22\n")
+	err = client.SendFile(smallFile, 1, 1, 1, 1, encrypt, password)
 	if err != nil {
 		log.Error(err)
 		return
@@ -69,10 +69,10 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	for i := 1; i < 80000; i++ {
+	for i := 1; i < 30000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
-	err = client.SendFile(bigFile, 1, 1, 1, 2, encrypt, password)
+	err = client.SendFile(bigFile, 1, 1, 1, 0, encrypt, password)
 	if err != nil {
 		log.Error(err)
 		return
@@ -196,5 +196,5 @@ func main() {
 	// logging.SetLogLevel("bitswap", "INFO")
 	logging.SetLogLevel("daseingosdk", "INFO")
 	// testGetData()
-	testSendSmallFile()
+	testSendBigFile()
 }
