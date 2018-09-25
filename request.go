@@ -51,13 +51,17 @@ func GetNodeList(fileSize uint64, copyNum int32, wallet, password, rpcSvrAddr st
 	return nodeList, nil
 }
 
-func PayStoreFile(info *StoreFileInfo, wallet, password, rpcSvrAddr string) ([]byte, error) {
+func ProveParamSer(g []byte, g0 []byte, pubKey []byte, fileId []byte, r string, wallet, password, rpcSvrAddr string) ([]byte, error) {
+	client := client.Init(wallet, password, rpcSvrAddr)
+	return client.ProveParamSer(g, g0, pubKey, fileId, r)
+}
+
+func PayStoreFile(info *StoreFileInfo, wallet, password, rpcSvrAddr string, proveParams []byte) ([]byte, error) {
 	client := client.Init(wallet, password, rpcSvrAddr)
 	if client == nil {
 		return nil, errors.New("client is nil")
 	}
-	proveBufs := make([]byte, 0)
-	return client.StoreFile(info.FileHashStr, info.KeepHours, info.BlockNum, info.BlockSize, info.ChallengeRate, info.ChallengeTimes, info.CopyNum, proveBufs)
+	return client.StoreFile(info.FileHashStr, info.KeepHours, info.BlockNum, info.BlockSize, info.ChallengeRate, info.ChallengeTimes, info.CopyNum, proveParams)
 }
 
 func IsFilePaid(fileHashStr string, wallet, password, rpcSvrAddr string) (bool, error) {

@@ -130,8 +130,6 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 	}
 
 	g, g0, pubKey, privKey, fileID, r, pairing := PoR.Init(fileName)
-	log.Infof("g:%d, g0:%v, pk:%d, prik:%d", len(g), len(g0), len(pubKey), len(privKey))
-	var rawTxId []byte
 	if !isPaid {
 		blockSize, err := root.Size()
 		if err != nil || blockSize == 0 {
@@ -148,11 +146,17 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 			BlockNum:       uint64(len(list)),
 			BlockSize:      blockSizeInKB,
 		}
-		rawTxId, err = PayStoreFile(storeFileInfo, c.wallet, password, c.rpc)
+		paramsBuf, err := ProveParamSer(g, g0, pubKey, []byte(fileID), r, c.wallet, password, c.rpc)
+		if err != nil {
+			log.Errorf("serialzation prove params failed:%s", err)
+			return err
+		}
+		rawTxId, err := PayStoreFile(storeFileInfo, c.wallet, password, c.rpc, paramsBuf)
 		if err != nil {
 			log.Errorf("pay store file order failed:%s", err)
 			return err
 		}
+		log.Infof("txId:%x", rawTxId)
 	} else {
 	}
 	err = c.PreSendFile(root, list, copyNum, nodeList)
@@ -224,7 +228,7 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 		} else {
 		}
 	}
-	log.Infof("File have stored: %s, Hash:%x", root.Cid().String(), rawTxId)
+	log.Infof("File have stored: %s", root.Cid().String())
 	return nil
 }
 

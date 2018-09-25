@@ -69,7 +69,7 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	for i := 1; i < 30000; i++ {
+	for i := 1; i < 80000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 	err = client.SendFile(bigFile, 1, 1, 1, 1, encrypt, password)
@@ -195,6 +195,6 @@ func main() {
 	logging.SetLogLevel("test", "INFO")
 	logging.SetLogLevel("daseingosdk", "INFO")
 	// testGetData()
-	testSendSmallFile()
+	testSendBigFile()
 	// testGetNodeList()
 }
