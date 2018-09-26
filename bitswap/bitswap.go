@@ -43,6 +43,7 @@ const (
 	MSG_TYPE_ADDBLOCKS        = "addblocks"        // the client send a addblocks msg
 	MSG_TYPE_ADDBLOCKSRESP    = "addblocksresp"    // the client received a addblocks response msg
 	MSG_TYPE_GETBLOCKS        = "getblocks"        // the client send a getblocks msg
+	MSG_TYPE_DELBLOCKS        = "delblocks"        // the client send a delblocks msg
 )
 
 //CopyState used for set copy state of one copy task
@@ -101,6 +102,7 @@ type Bitswap struct {
 func (bs *Bitswap) DelBlock(ctx context.Context, id peer.ID, cid *cid.Cid) error {
 	msg := bsmsg.New(true)
 	msg.Delete(cid)
+	msg.SetMessageType(MSG_TYPE_DELBLOCKS)
 	return bs.network.SendMessage(context.TODO(), id, msg)
 }
 
@@ -110,6 +112,7 @@ func (bs *Bitswap) DelBlocks(ctx context.Context, id peer.ID, cids []*cid.Cid) e
 	for _, cid := range cids {
 		msg.Delete(cid)
 	}
+	msg.SetMessageType(MSG_TYPE_DELBLOCKS)
 	return bs.network.SendMessage(context.TODO(), id, msg)
 }
 

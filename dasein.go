@@ -54,9 +54,11 @@ func NewClient(server, wallet, password, rpc string) (*Client, error) {
 		rpc:       rpc,
 	}
 
-	core.InitParam(server)
-	client.node, err = core.NewNode(context.TODO())
-	client.peer, err = config.ParseBootstrapPeer(server)
+	if len(server) > 0 {
+		core.InitParam(server)
+		client.node, err = core.NewNode(context.TODO())
+		client.peer, err = config.ParseBootstrapPeer(server)
+	}
 	client.rfm = NewReadFileMgr()
 	return client, err
 }
@@ -92,16 +94,7 @@ func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) ([]byt
 	c.rfm.RemoveSliceId(cidString)
 	return buf, err
 }
-
 func (c *Client) DelData(cidString string) error {
-	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
-	if request == nil {
-		return errors.New("init contract requester fail in DelData")
-	}
-	err := request.DeleteFile(cidString)
-	if err != nil {
-		return err
-	}
 	CID, err := cid.Decode(cidString)
 	if err != nil {
 		return err

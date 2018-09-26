@@ -179,6 +179,40 @@ func testGetData() {
 	*/
 }
 
+func testDelData() {
+	walletPwd, err := getPassword()
+	if err != nil {
+		log.Error(err)
+	}
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	nodes, err := r.FindStoreFileNodes(smallTxt)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	file := "QmQHkNBsHaaYAQkHrDCYEJSYwtQGXfodMMJhmiEMPc5b4B"
+
+	err = r.DeleteFile(file)
+	fmt.Printf("delete file result:%s", err)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	// time.Sleep(time.Duration(30) * time.Second)
+
+	for _, node := range nodes {
+		client, err := sdk.NewClient(node.Addr, wallet, walletPwd, rpc)
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		err = client.DelData(file)
+		if err != nil {
+			log.Errorf("delete file:%s failed in node:%s", file, node.Addr)
+		}
+	}
+}
+
 func testGetNodeList() {
 	walletPwd, err := getPassword()
 	if err != nil {
@@ -251,7 +285,8 @@ func main() {
 	logging.SetLogLevel("daseingosdk", "DEBUG")
 	logging.SetLogLevel("bitswap", "DEBUG")
 	// testSendSmallFile()
-	testGetData()
+	// testGetData()
+	testDelData()
 	// testSendBigFile()
 	// testSendSmallFile()
 	// testGetNodeList()
