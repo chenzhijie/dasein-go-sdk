@@ -2,34 +2,38 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 
 	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
 
 	sdk "github.com/daseinio/dasein-go-sdk"
 	"github.com/daseinio/dasein-go-sdk/crypto"
+	"github.com/howeyc/gopass"
 )
 
-var smallTxt = "QmfWAu8auG7NdzVyUAeb1PU5uUs5W3DrCWhMk6B1iCsnvk"
+var smallTxt = "QmZyvDNq1gHEkH5USKLUSunZBBya4qox7w4dWGxnt41Zox"
 var bigTxt = "QmW5CME8vkw3ndeuDuf5a5oL9x55yPWfhF4fz4R6XTMTBk"
 
 //var largeTxt = "QmU7QRQpSZhukKsraEaa23Re1AzLqpFvyHPwayseVKTbFp"
 var deleteTxt = "QmevhnWdtmz89BMXuuX5pSY2uZtqKLz7frJsrCojT5kmb6"
 
 // var node = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
-
 var node = "/ip4/127.0.0.1/tcp/4001/ipfs/Qmdkh8dBb8p99KGDhazTnNZJpM4hDx95NJtnSLGSKp5tTy"
 
 var log = logging.Logger("test")
 
 var encrypt = false
-var password = "123456"
+var encryptPassword = "123456"
 var wallet = "./wallet.dat"
-var walletPwd = "pwd"
 var rpc = "http://127.0.0.1:20336"
 
 func testSendSmallFile() {
-	client, err := sdk.NewClient(node, wallet, rpc)
+	walletPwd, err := getPassword()
+	if err != nil {
+		log.Error(err)
+	}
+	client, err := sdk.NewClient(node, wallet, walletPwd, rpc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -41,8 +45,8 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("hello world22\n")
-	err = client.SendFile(smallFile, 1, 1, 1, 0, encrypt, password)
+	smallF.WriteString("hello world223455\n")
+	err = client.SendFile(smallFile, 1, 1, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
 		return
@@ -56,7 +60,11 @@ func testSendSmallFile() {
 }
 
 func testSendBigFile() {
-	client, err := sdk.NewClient(node, wallet, rpc)
+	walletPwd, err := getPassword()
+	if err != nil {
+		log.Error(err)
+	}
+	client, err := sdk.NewClient(node, wallet, walletPwd, rpc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -69,10 +77,10 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	for i := 1; i < 80000; i++ {
+	for i := 1; i < 40000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
-	err = client.SendFile(bigFile, 1, 1, 1, 1, encrypt, password)
+	err = client.SendFile(bigFile, 1, 1, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Errorf("send file err:%s", err)
 		return
@@ -85,7 +93,20 @@ func testSendBigFile() {
 }
 
 func testGetData() {
-	client, err := sdk.NewClient(node, wallet, rpc)
+	walletPwd, err := getPassword()
+	if err != nil {
+		log.Error(err)
+	}
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	nodes, err := r.FindStoreFileNodes(smallTxt)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	randIndx := rand.Intn(len(nodes))
+	chosenNode := nodes[randIndx]
+	log.Infof("get data from :%s", chosenNode.Addr)
+	client, err := sdk.NewClient(chosenNode.Addr, wallet, walletPwd, rpc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -93,7 +114,9 @@ func testGetData() {
 
 	log.Info("-----------------------")
 	log.Info("Single Block Test")
-	data, err := client.GetData(smallTxt)
+	// data, err := client.GetData("QmdYVqoNoRZ9uDbU9FVMkTkmjArhL9u4NWipaNLHMCtAcT", chosenNode.WalletAddr)
+	data, err := client.GetData("QmQHkNBsHaaYAQkHrDCYEJSYwtQGXfodMMJhmiEMPc5b4B", chosenNode.WalletAddr)
+	// data, err := client.GetData(smallTxt, chosenNode.WalletAddr)
 	if err != nil {
 		log.Error(err)
 	}
@@ -109,33 +132,33 @@ func testGetData() {
 	}
 	file.Close()
 	if encrypt {
-		crypto.AESDecryptFile("small", password, "small-decrypted")
+		crypto.AESDecryptFile("small", encryptPassword, "small-decrypted")
 	}
 	log.Info("-----------------------")
-	log.Info("Multi Block Test")
-	data, err = client.GetData(bigTxt)
-	if err != nil {
-		log.Error(err)
-	}
+	// log.Info("Multi Block Test")
+	// data, err = client.GetData(bigTxt)
+	// if err != nil {
+	// 	log.Error(err)
+	// }
 
-	file, err = os.Create("big")
-	if err != nil {
-		log.Error(err)
-	}
-	_, err = file.Write(data)
-	if err != nil {
-		log.Error(err)
-	}
-	file.Close()
+	// file, err = os.Create("big")
+	// if err != nil {
+	// 	log.Error(err)
+	// }
+	// _, err = file.Write(data)
+	// if err != nil {
+	// 	log.Error(err)
+	// }
+	// file.Close()
 
-	log.Info("-----------------------")
-	log.Info("Delete Block Test")
-	err = client.DelData(deleteTxt)
-	if err != nil {
-		log.Error(err)
-	} else {
-		log.Infof("DelData %s success", deleteTxt)
-	}
+	// log.Info("-----------------------")
+	// log.Info("Delete Block Test")
+	// err = client.DelData(deleteTxt)
+	// if err != nil {
+	// 	log.Error(err)
+	// } else {
+	// 	log.Infof("DelData %s success", deleteTxt)
+	// }
 
 	/*
 		log.Info("Multi Block Test")
@@ -157,7 +180,12 @@ func testGetData() {
 }
 
 func testGetNodeList() {
-	l, err := sdk.GetNodeList(0, 1, wallet, walletPwd, rpc)
+	walletPwd, err := getPassword()
+	if err != nil {
+		log.Error(err)
+	}
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	l, err := r.GetNodeList(0, 1)
 	if err != nil {
 		log.Error(err)
 	}
@@ -166,8 +194,12 @@ func testGetNodeList() {
 
 func testStoreFile() {
 	hashStr := "QmbZdTb7U6eKCmPRjdxBxjmAnAzLvUz2htmTuhqSAVrEKw"
-
-	paid, err := sdk.IsFilePaid(hashStr, wallet, walletPwd, rpc)
+	walletPwd, err := getPassword()
+	if err != nil {
+		log.Error(err)
+	}
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	paid, err := r.IsFilePaid(hashStr)
 	if err != nil {
 		log.Error(err)
 	}
@@ -184,17 +216,44 @@ func testStoreFile() {
 		ChallengeTimes: 1,
 		CopyNum:        0,
 	}
-	h, err := sdk.PayStoreFile(info, wallet, walletPwd, rpc)
+	h, err := r.PayStoreFile(info, []byte("1"))
 	if err != nil {
 		log.Error(err)
 	}
 	log.Infof("list:%x\n", h)
 }
 
+func testGetFileProveDetails() {
+	walletPwd, err := getPassword()
+	if err != nil {
+		log.Error(err)
+	}
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	r.FindStoreFileNodes("QmZyvDNq1gHEkH5USKLUSunZBBya4qox7w4dWGxnt41Zox")
+}
+
+func getPassword() (string, error) {
+	testing := true
+	if testing {
+		return "pwd", nil
+	} else {
+		fmt.Printf("Password:")
+		pwd, err := gopass.GetPasswd()
+		if err != nil {
+			return "", err
+		}
+		return string(pwd), nil
+	}
+}
+
 func main() {
-	logging.SetLogLevel("test", "INFO")
-	logging.SetLogLevel("daseingosdk", "INFO")
-	// testGetData()
-	testSendBigFile()
+	logging.SetLogLevel("test", "DEBUG")
+	logging.SetLogLevel("daseingosdk", "DEBUG")
+	logging.SetLogLevel("bitswap", "DEBUG")
+	// testSendSmallFile()
+	testGetData()
+	// testSendBigFile()
+	// testSendSmallFile()
 	// testGetNodeList()
+	// testGetFileProveDetails()
 }

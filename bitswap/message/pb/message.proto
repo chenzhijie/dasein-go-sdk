@@ -7,7 +7,8 @@ message Message {
     message Entry {
       optional string block = 1; 	// the block cid (cidV0 in bitswap 1.0.0, cidV1 in bitswap 1.1.0)
       optional int32 priority = 2; 	// the priority (normalized). default to 1
-      optional int32 operate = 3;  	// whether this revokes an entry
+      optional int32 operation = 3;  	// whether this revokes an entry
+      optional bytes settleSlice = 4; // read block settle slice
     }
 
     repeated Entry entries = 1; 	// a list of wantlist entries
@@ -39,6 +40,6 @@ message Message {
   optional Backup backup = 5;      // used to send backup blocks
   repeated string links = 6;       // used to send all node links for a file
   optional bytes  response = 7;    // response result 
-   optional string fileHash = 8;    // file hash
+  optional string fileHash = 8;    // file hash
   repeated Tagpack tagPacks = 9;       // tag packet, correspond to with blocks
 }

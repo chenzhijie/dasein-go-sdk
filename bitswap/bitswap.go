@@ -31,7 +31,7 @@ var (
 	outChanBufferSize      = 10 // receive msg channel size
 	maxPreAddBlocksTimeout = 30 // recive pre addblocks timeout in second
 	maxAddBlocksTimeout    = 10 // recive addblocks timeout in second * 1CopyNum * 1Block
-	maxGetBlocksTimeout    = 10 // recive getblocks timeout in second
+	maxGetBlocksTimeout    = 30 // recive getblocks timeout in second
 )
 
 var rebroadcastDelay = delay.Fixed(time.Minute)
@@ -42,6 +42,7 @@ const (
 	MSG_TYPE_PREADDBLOCKSRESP = "preaddblocksresp" // the client received a preaddblocks response msg
 	MSG_TYPE_ADDBLOCKS        = "addblocks"        // the client send a addblocks msg
 	MSG_TYPE_ADDBLOCKSRESP    = "addblocksresp"    // the client received a addblocks response msg
+	MSG_TYPE_GETBLOCKS        = "getblocks"        // the client send a getblocks msg
 )
 
 //CopyState used for set copy state of one copy task
@@ -161,14 +162,19 @@ func (bs *Bitswap) PreAddBlocks(ctx context.Context, id peer.ID, fileHash string
 		log.Errorf("pre add blocks err:%s", err)
 		return err
 	}
+	stopTimeout := false
 	go func() {
 		<-time.After(time.Duration(maxPreAddBlocksTimeout) * time.Second)
+		if stopTimeout {
+			return
+		}
 		bs.outChan <- &AddBlocksResp{
 			Result: "fail",
 			Error:  "wait for response timeout",
 		}
 	}()
 	ret := <-bs.outChan
+	stopTimeout = true
 	switch ret.(type) {
 	case *AddBlocksResp:
 		if ret.(*AddBlocksResp).Result == "success" {
@@ -181,16 +187,23 @@ func (bs *Bitswap) PreAddBlocks(ctx context.Context, id peer.ID, fileHash string
 	}
 }
 
-func (bs *Bitswap) GetBlocks(ctx context.Context, id peer.ID, key *cid.Cid) ([]blocks.Block, error) {
+func (bs *Bitswap) GetBlocks(ctx context.Context, id peer.ID, fileHashStr string, key *cid.Cid, settleSlice []byte) ([]blocks.Block, error) {
 	msg := bsmsg.New(true)
-	msg.AddEntry(key, kMaxPriority)
+	msg.Read(key, kMaxPriority, settleSlice)
+	msg.SetMessageType(MSG_TYPE_GETBLOCKS)
+	msg.SetFileHash(fileHashStr)
+	log.Debugf("getFile:%s, cid:%s, slice:%d", fileHashStr, key.String(), len(settleSlice))
 	err := bs.network.SendMessage(ctx, id, msg)
 	if err != nil {
 		return nil, err
 	}
+	stopTimeout := false
 	go func() {
 		timeout := maxGetBlocksTimeout
 		<-time.After(time.Duration(timeout) * time.Second)
+		if stopTimeout {
+			return
+		}
 		bs.outChan <- &GetBlocksResp{
 			Result: "fail",
 			Error:  "wait for response timeout",
@@ -198,6 +211,7 @@ func (bs *Bitswap) GetBlocks(ctx context.Context, id peer.ID, key *cid.Cid) ([]b
 	}()
 
 	ret := <-bs.outChan
+	stopTimeout = true
 	switch ret.(type) {
 	case []blocks.Block:
 		return ret.([]blocks.Block), nil
@@ -234,18 +248,23 @@ func (bs *Bitswap) AddBlocks(ctx context.Context, id peer.ID, fileHash string, b
 	if err != nil {
 		return nil, err
 	}
+	stopTimeout := false
 	go func() {
 		timeout := maxAddBlocksTimeout * len(blk)
 		if copyNum > 0 {
 			timeout *= int(copyNum)
 		}
 		<-time.After(time.Duration(timeout) * time.Second)
+		if stopTimeout {
+			return
+		}
 		bs.outChan <- &AddBlocksResp{
 			Result: "fail",
 			Error:  "wait for response timeout",
 		}
 	}()
 	ret := <-bs.outChan
+	stopTimeout = true
 	switch ret.(type) {
 	case *AddBlocksResp:
 		if ret.(*AddBlocksResp).Result == "success" {

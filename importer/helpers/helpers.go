@@ -32,7 +32,8 @@ var roughLinkSize = 34 + 8 + 5   // sha256 multihash + size + no name + protobuf
 //   var DefaultLinksPerBlock = (roughLinkBlockSize / roughLinkSize)
 //
 // See calc_test.go
-var DefaultLinksPerBlock = roughLinkBlockSize / roughLinkSize
+// var DefaultLinksPerBlock = roughLinkBlockSize / roughLinkSize
+var DefaultLinksPerBlock = 2
 
 // ErrSizeLimitExceeded signals that a block is larger than BlockSizeLimit.
 var ErrSizeLimitExceeded = fmt.Errorf("object size limit exceeded")

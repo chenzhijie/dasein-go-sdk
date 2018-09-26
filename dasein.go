@@ -3,6 +3,7 @@ package dasein_go_sdk
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -27,7 +28,7 @@ import (
 	ml "github.com/daseinio/dasein-go-sdk/merkledag"
 	"github.com/daseinio/dasein-go-sdk/repo/config"
 	ftpb "github.com/daseinio/dasein-go-sdk/unixfs/pb"
-	"github.com/howeyc/gopass"
+	"github.com/ontio/ontology/common"
 )
 
 var log = logging.Logger("daseingosdk")
@@ -37,34 +38,70 @@ const (
 )
 
 type Client struct {
-	node   *core.IpfsNode
-	peer   config.BootstrapPeer
-	wallet string
-	rpc    string
+	node      *core.IpfsNode
+	peer      config.BootstrapPeer
+	wallet    string
+	walletPwd string
+	rpc       string
+	rfm       *ReadFileMgr
 }
 
-func NewClient(server, wallet, rpc string) (*Client, error) {
+func NewClient(server, wallet, password, rpc string) (*Client, error) {
 	var err error
 	client := &Client{
-		wallet: wallet,
-		rpc:    rpc,
+		wallet:    wallet,
+		walletPwd: password,
+		rpc:       rpc,
 	}
 
 	core.InitParam(server)
 	client.node, err = core.NewNode(context.TODO())
 	client.peer, err = config.ParseBootstrapPeer(server)
+	client.rfm = NewReadFileMgr()
 	return client, err
 }
 
-func (c *Client) GetData(cidString string) ([]byte, error) {
+func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) ([]byte, error) {
+	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
+	if request == nil {
+		return nil, errors.New("init contract requester fail in GetData")
+	}
+	fileInfo, err := request.GetFileInfo(cidString)
+	if err != nil {
+		return nil, err
+	}
+	fee, err := request.CalculateReadFee(fileInfo, cidString)
+	if err != nil {
+		return nil, err
+	}
+	log.Infof("fee:%d", fee)
+	txHash, err := request.PledgeForReadFile(cidString, nodeWalletAddr, fee)
+	if err != nil {
+		return nil, err
+	}
+	log.Debugf("txHash:%x", txHash)
 	CID, err := cid.Decode(cidString)
 	if err != nil {
 		return nil, err
 	}
-	return c.decodeBlock(CID, c.peer.ID())
+
+	buf, err := c.decodeBlock(CID, c.peer.ID(), cidString, request, nodeWalletAddr, fileInfo.BlockSize)
+	if err != nil {
+		return nil, err
+	}
+	c.rfm.RemoveSliceId(cidString)
+	return buf, err
 }
 
 func (c *Client) DelData(cidString string) error {
+	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
+	if request == nil {
+		return errors.New("init contract requester fail in DelData")
+	}
+	err := request.DeleteFile(cidString)
+	if err != nil {
+		return err
+	}
 	CID, err := cid.Decode(cidString)
 	if err != nil {
 		return err
@@ -86,18 +123,17 @@ func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, copyNum
 }
 
 // SendFile send a file to node with copy number
-func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint64, challengeTimes uint64, copyNum int32, encrypt bool, password string) error {
-	password, err := getPassword()
-	if err != nil {
-		return err
-	}
-
+func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes uint64, copyNum int32, encrypt bool, encryptPassword string) error {
 	// get nodeList
 	fileInfo, err := os.Stat(fileName)
 	if err != nil {
 		return err
 	}
-	nodeList, err := GetNodeList(uint64(fileInfo.Size()), copyNum, c.wallet, password, c.rpc)
+	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
+	if request == nil {
+		return errors.New("init contract requester failed in SendFile")
+	}
+	nodeList, err := request.GetNodeList(uint64(fileInfo.Size()), copyNum)
 	if err != nil {
 		return err
 	}
@@ -118,13 +154,13 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 		}
 	}
 	// split file to blocks
-	root, list, err := nodesFromFile(fileName, encrypt, password)
+	root, list, err := nodesFromFile(fileName, encrypt, encryptPassword)
 	if err != nil {
 		return err
 	}
 
 	// check if file has paid
-	isPaid, err := IsFilePaid(root.Cid().String(), c.wallet, password, c.rpc)
+	isPaid, err := request.IsFilePaid(root.Cid().String())
 	if err != nil {
 		return err
 	}
@@ -136,22 +172,22 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 			return err
 		}
 		blockSizeInKB := uint64(math.Ceil(float64(blockSize) / 1024.0))
+		log.Debugf("blocksize:%d, inkb:%d", blockSize, blockSizeInKB)
 		// prepay for store file
 		storeFileInfo := &StoreFileInfo{
 			FileHashStr:    root.Cid().String(),
-			KeepHours:      keepHours,
 			ChallengeRate:  challengeRate,
 			ChallengeTimes: challengeTimes,
 			CopyNum:        uint64(copyNum),
 			BlockNum:       uint64(len(list)),
 			BlockSize:      blockSizeInKB,
 		}
-		paramsBuf, err := ProveParamSer(g, g0, pubKey, []byte(fileID), r, c.wallet, password, c.rpc)
+		paramsBuf, err := request.ProveParamSer(g, g0, pubKey, []byte(fileID), r)
 		if err != nil {
 			log.Errorf("serialzation prove params failed:%s", err)
 			return err
 		}
-		rawTxId, err := PayStoreFile(storeFileInfo, c.wallet, password, c.rpc, paramsBuf)
+		rawTxId, err := request.PayStoreFile(storeFileInfo, paramsBuf)
 		if err != nil {
 			log.Errorf("pay store file order failed:%s", err)
 			return err
@@ -232,9 +268,15 @@ func (c *Client) SendFile(fileName string, keepHours uint64, challengeRate uint6
 	return nil
 }
 
-func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID) ([]byte, error) {
+func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID, fileHashStr string, request *ContractRequest, nodeWalletAddr common.Address, blockSize uint64) ([]byte, error) {
+	// sliceId equal to blockIndex
+	sliceId := c.rfm.IncreAndGetSliceId(fileHashStr)
+	settleSlice, err := request.GenFileReadSettleSlice(fileHashStr, nodeWalletAddr, sliceId, blockSize, sliceId)
+	if err != nil {
+		return nil, err
+	}
 	var buf bytes.Buffer
-	blocks, err := c.node.Exchange.GetBlocks(context.Background(), peerId, CID)
+	blocks, err := c.node.Exchange.GetBlocks(context.Background(), peerId, fileHashStr, CID, settleSlice)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +298,7 @@ func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID) ([]byte, error) {
 		}
 	} else {
 		for i := 0; i < linksNum; i++ {
-			childBuf, err := c.decodeBlock(dagNode.Links()[i].Cid, peerId)
+			childBuf, err := c.decodeBlock(dagNode.Links()[i].Cid, peerId, fileHashStr, request, nodeWalletAddr, blockSize)
 			if err != nil {
 				return nil, err
 			}
@@ -328,13 +370,4 @@ func nodesFromFile(fileName string, encrypt bool, password string) (ipld.Node, [
 		return trickle.Layout(db)
 	}
 	return balanced.Layout(db)
-}
-
-func getPassword() (string, error) {
-	fmt.Printf("Password:")
-	pwd, err := gopass.GetPasswd()
-	if err != nil {
-		return "", err
-	}
-	return string(pwd), nil
 }

@@ -35,6 +35,8 @@ type BitSwapMessage interface {
 	// AddEntry adds an entry to the Wantlist.
 	AddEntry(key *cid.Cid, priority int)
 
+	Read(key *cid.Cid, priority int, settleSlice []byte)
+
 	Cancel(key *cid.Cid)
 
 	Delete(key *cid.Cid)
@@ -108,7 +110,8 @@ func newMsg(full bool) *impl {
 
 type Entry struct {
 	*wantlist.Entry
-	Operation int
+	Operation   int
+	SettleSlice []byte
 }
 
 func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
@@ -118,7 +121,7 @@ func newMessageFromProto(pbm pb.Message) (BitSwapMessage, error) {
 		if err != nil {
 			return nil, fmt.Errorf("incorrectly formatted cid in wantlist: %s", err)
 		}
-		m.addEntry(c, int(e.GetPriority()), int(e.GetOperate()))
+		m.addEntry(c, int(e.GetPriority()), int(e.GetOperation()), e.GetSettleSlice())
 	}
 
 	// deprecated
@@ -195,32 +198,43 @@ func (m *impl) Blocks() []blocks.Block {
 
 func (m *impl) Cancel(k *cid.Cid) {
 	delete(m.wantlist, k.KeyString())
-	m.addEntry(k, 0, CANCLE)
+	m.addEntry(k, 0, CANCLE, nil)
 }
 
 func (m *impl) Delete(k *cid.Cid) {
 	delete(m.wantlist, k.KeyString())
-	m.addEntry(k, 0, DELETE)
+	m.addEntry(k, 0, DELETE, nil)
+}
+
+func (m *impl) Read(k *cid.Cid, priority int, settleSlice []byte) {
+	m.addEntry(k, priority, NOOPER, settleSlice)
 }
 
 func (m *impl) AddEntry(k *cid.Cid, priority int) {
-	m.addEntry(k, priority, NOOPER)
+	m.addEntry(k, priority, NOOPER, nil)
 }
 
-func (m *impl) addEntry(c *cid.Cid, priority int, operation int) {
+func (m *impl) addEntry(c *cid.Cid, priority int, operation int, settleSlice []byte) {
 	k := c.KeyString()
 	e, exists := m.wantlist[k]
 	if exists {
 		e.Priority = priority
 		e.Operation = operation
+		if len(settleSlice) > 0 {
+			e.SettleSlice = settleSlice
+		}
 	} else {
-		m.wantlist[k] = &Entry{
+		newEntry := &Entry{
 			Entry: &wantlist.Entry{
 				Cid:      c,
 				Priority: priority,
 			},
 			Operation: operation,
 		}
+		if len(settleSlice) > 0 {
+			newEntry.SettleSlice = settleSlice
+		}
+		m.wantlist[k] = newEntry
 	}
 }
 
@@ -248,9 +262,10 @@ func (m *impl) ToProtoV0() *pb.Message {
 	pbm.Wantlist.Entries = make([]*pb.Message_Wantlist_Entry, 0, len(m.wantlist))
 	for _, e := range m.wantlist {
 		pbm.Wantlist.Entries = append(pbm.Wantlist.Entries, &pb.Message_Wantlist_Entry{
-			Block:    proto.String(e.Cid.KeyString()),
-			Priority: proto.Int32(int32(e.Priority)),
-			Operate:  proto.Int32(int32(e.Operation)),
+			Block:       proto.String(e.Cid.KeyString()),
+			Priority:    proto.Int32(int32(e.Priority)),
+			Operation:   proto.Int32(int32(e.Operation)),
+			SettleSlice: e.SettleSlice,
 		})
 	}
 	pbm.Wantlist.Full = proto.Bool(m.full)
@@ -295,9 +310,10 @@ func (m *impl) ToProtoV1() *pb.Message {
 	pbm.Wantlist.Entries = make([]*pb.Message_Wantlist_Entry, 0, len(m.wantlist))
 	for _, e := range m.wantlist {
 		pbm.Wantlist.Entries = append(pbm.Wantlist.Entries, &pb.Message_Wantlist_Entry{
-			Block:    proto.String(e.Cid.KeyString()),
-			Priority: proto.Int32(int32(e.Priority)),
-			Operate:  proto.Int32(int32(e.Operation)),
+			Block:       proto.String(e.Cid.KeyString()),
+			Priority:    proto.Int32(int32(e.Priority)),
+			Operation:   proto.Int32(int32(e.Operation)),
+			SettleSlice: e.SettleSlice,
 		})
 	}
 	pbm.Wantlist.Full = proto.Bool(m.full)

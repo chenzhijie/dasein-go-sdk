@@ -10,7 +10,7 @@ import (
 
 // Interface defines the functionality of the IPFS block exchange protocol.
 type Exchange interface { // type Exchanger interface
-	GetBlocks(context.Context, peer.ID, *cid.Cid) ([]blocks.Block, error)
+	GetBlocks(context.Context, peer.ID, string, *cid.Cid, []byte) ([]blocks.Block, error)
 
 	DelBlock(context.Context, peer.ID, *cid.Cid) error
 	DelBlocks(context.Context, peer.ID, []*cid.Cid) error
