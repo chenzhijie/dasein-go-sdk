@@ -55,8 +55,8 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("hello world2234556666789\n")
-	err = client.SendFile(smallFile, 1, 1, 0, encrypt, encryptPassword)
+	smallF.WriteString("123h123123ello 12393 world22345566667872722129\n")
+	err = client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
 		return
@@ -86,7 +86,7 @@ func testSendBigFile() {
 	for i := 1; i < 80000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
-	err = client.SendFile(bigFile, 1, 1, 0, encrypt, encryptPassword)
+	err = client.SendFile(bigFile, 10, 10, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Errorf("send file err:%s", err)
 		return
@@ -105,6 +105,10 @@ func testGetData(fileHashStr string) {
 		log.Error(err)
 		return
 	}
+	if len(nodes) == 0 {
+		log.Errorf("no nodes for:%s", fileHashStr)
+		return
+	}
 	randIndx := rand.Intn(len(nodes))
 	chosenNode := nodes[randIndx]
 	log.Infof("get data from :%s", chosenNode.Addr)
@@ -119,18 +123,9 @@ func testGetData(fileHashStr string) {
 	_, err = client.GetData(fileHashStr, chosenNode.WalletAddr)
 	if err != nil {
 		log.Error(err)
+		return
 	}
-	// file, err := os.Create("small")
-	// if err != nil {
-	// 	log.Error(err)
-	// } else {
-	// 	log.Infof("GetData %s success", smallTxt)
-	// }
-	// _, err = file.Write(data)
-	// if err != nil {
-	// 	log.Error(err)
-	// }
-	// file.Close()
+	log.Infof("get: %s success", fileHashStr)
 	if encrypt {
 		crypto.AESDecryptFile(fileHashStr, encryptPassword, fmt.Sprintf("%s-decrypted", fileHashStr))
 	}
@@ -220,8 +215,6 @@ func testDelData(fileHashStr string) {
 }
 
 func testByFlags() {
-	var fileName *string = flag.String("file", "", "Use --file <filesource>")
-	var operation *string = flag.String("op", "", "Use --op <send|get|del|testsendsmall|testsendbig>")
 	var isEncrypt *bool = flag.Bool("encrypt", false, "Encrypt file")
 	var ePwd *string = flag.String("encryptpwd", "", "Encrypt password")
 	var wPwd *string = flag.String("walletpwd", "pwd", "Wallet password")
@@ -229,29 +222,30 @@ func testByFlags() {
 	var times *int = flag.Int("challengetimes", 1, "challenge time")
 	var copynum *int = flag.Int("copynum", 0, "backup nodes number for copy")
 	flag.Parse()
-	if len(*operation) == 0 {
+	if len(os.Args) < 2 {
 		return
 	}
+	operation := os.Args[1]
+	var fileName string
+	if operation == "send" || operation == "get" || operation == "del" {
+		if len(os.Args) < 3 {
+			return
+		}
+		fileName = os.Args[2]
+	}
+
 	if len(*ePwd) > 0 {
 		encryptPassword = *ePwd
 	}
 	walletPwd = *wPwd
 	encrypt = *isEncrypt
-	switch *operation {
+	switch operation {
 	case "send":
-		testSendFile(*fileName, uint64(*rates), uint64(*times), int32(*copynum))
+		testSendFile(fileName, uint64(*rates), uint64(*times), int32(*copynum))
 	case "get":
-		if len(*fileName) <= 0 {
-			log.Errorf("option: file is missing")
-			return
-		}
-		testGetData(*fileName)
+		testGetData(fileName)
 	case "del":
-		if len(*fileName) <= 0 {
-			log.Errorf("option: file is missing")
-			return
-		}
-		testDelData(*fileName)
+		testDelData(fileName)
 	case "testsendsmall":
 		testSendSmallFile()
 	case "testsendbig":
@@ -263,6 +257,7 @@ func main() {
 	logging.SetLogLevel("test", "INFO")
 	logging.SetLogLevel("daseingosdk", "INFO")
 	logging.SetLogLevel("bitswap", "INFO")
+
 	testByFlags()
 	// testDelFileAndGet()
 	// testSendSmallFile()

@@ -74,8 +74,8 @@ func (cr *ContractRequest) GetNodeList(fileSize uint64, copyNum int32) ([]string
 	return nodeList, nil
 }
 
-func (cr *ContractRequest) ProveParamSer(g []byte, g0 []byte, pubKey []byte, fileId []byte, r string) ([]byte, error) {
-	return cr.client.ProveParamSer(g, g0, pubKey, fileId, r)
+func (cr *ContractRequest) ProveParamSer(g []byte, g0 []byte, pubKey []byte, fileId []byte, r, pairing string) ([]byte, error) {
+	return cr.client.ProveParamSer(g, g0, pubKey, fileId, r, pairing)
 }
 
 func (cr *ContractRequest) PayStoreFile(info *StoreFileInfo, proveParams []byte) ([]byte, error) {
@@ -117,14 +117,14 @@ type NodeInfo struct {
 
 func (cr *ContractRequest) FindStoreFileNodes(fileHashStr string) ([]*NodeInfo, error) {
 	details, err := cr.client.GetFileProveDetails(fileHashStr)
+	log.Debugf("get details:%d err:%s\n", details.ProveDetailNum, err)
 	if err != nil {
-		// return nil, err
-		log.Debugf("get details err:%s\n", err)
+		return nil, err
 	}
-	log.Debugf("get prove details:%v\n", details)
 	nodes := make([]*NodeInfo, 0)
 	if details != nil {
 		for _, d := range details.ProveDetails {
+			log.Debugf("addr:%s, time:%d", string(d.NodeAddr), d.ProveTimes)
 			if len(d.NodeAddr) > 0 {
 				nInfo := &NodeInfo{
 					Addr:       string(d.NodeAddr),
@@ -133,19 +133,6 @@ func (cr *ContractRequest) FindStoreFileNodes(fileHashStr string) ([]*NodeInfo, 
 				nodes = append(nodes, nInfo)
 			}
 		}
-	}
-
-	// for testing
-	if len(nodes) == 0 {
-		b58Addr, err := common.AddressFromBase58("AYMnqA65pJFKAbbpD8hi5gdNDBmeFBy5hS")
-		if err != nil {
-			return nil, err
-		}
-		nodes = append(nodes, &NodeInfo{
-			Addr:       "/ip4/127.0.0.1/tcp/4001/ipfs/Qmdkh8dBb8p99KGDhazTnNZJpM4hDx95NJtnSLGSKp5tTy",
-			WalletAddr: b58Addr,
-		})
-		return nodes, nil
 	}
 	return nodes, nil
 }

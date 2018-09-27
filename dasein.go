@@ -184,7 +184,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 			BlockNum:       uint64(len(list)),
 			BlockSize:      blockSizeInKB,
 		}
-		paramsBuf, err := request.ProveParamSer(g, g0, pubKey, []byte(fileID), r)
+		paramsBuf, err := request.ProveParamSer(g, g0, pubKey, []byte(fileID), r, pairing)
 		if err != nil {
 			log.Errorf("serialzation prove params failed:%s", err)
 			return err
