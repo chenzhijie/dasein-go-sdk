@@ -46,7 +46,6 @@ func NewContractRequest(wallet, password, rpcSvrAddr string) *ContractRequest {
 
 type StoreFileInfo struct {
 	FileHashStr    string
-	KeepHours      uint64
 	BlockNum       uint64
 	BlockSize      uint64
 	ChallengeRate  uint64
@@ -62,19 +61,11 @@ func (cr *ContractRequest) GetNodeList(fileSize uint64, copyNum int32) ([]string
 	// TODO: check storage service time is enough
 	nodeList := make([]string, 0)
 	for _, info := range infos.Item {
-		fullAddress := string(info.NodeAddr)
-		parts := strings.Split(fullAddress, "/")
-		if len(parts) == 0 {
-			continue
-		}
 		if info.RestVol < fileSize {
 			continue
 		}
-		id := parts[len(parts)-1]
-		if len(id) <= 0 {
-			continue
-		}
-		nodeList = append(nodeList, id)
+		fullAddress := string(info.NodeAddr)
+		nodeList = append(nodeList, fullAddress)
 	}
 	if len(nodeList) < int(copyNum)+1 {
 		return nil, fmt.Errorf("nodelist count:%d smaller than copynum:%d", len(nodeList), copyNum)
@@ -128,7 +119,9 @@ func (cr *ContractRequest) FindStoreFileNodes(fileHashStr string) ([]*NodeInfo, 
 	details, err := cr.client.GetFileProveDetails(fileHashStr)
 	if err != nil {
 		// return nil, err
+		log.Debugf("get details err:%s\n", err)
 	}
+	log.Debugf("get prove details:%v\n", details)
 	nodes := make([]*NodeInfo, 0)
 	if details != nil {
 		for _, d := range details.ProveDetails {
@@ -208,4 +201,21 @@ func (cr *ContractRequest) updateSetting() error {
 		gasForChallenge:  fsSetting.GasForChallenge,
 	}
 	return nil
+}
+
+func SplitNodeFullAddressToId(nodeList []string) []string {
+	ids := make([]string, 0)
+	for _, fullAddress := range nodeList {
+		parts := strings.Split(fullAddress, "/")
+		if len(parts) == 0 {
+			continue
+		}
+
+		id := parts[len(parts)-1]
+		if len(id) <= 0 {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	return ids
 }

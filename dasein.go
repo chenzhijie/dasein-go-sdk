@@ -1,7 +1,6 @@
 package dasein_go_sdk
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +8,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"time"
 
 	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
 	chunker "gx/ipfs/QmWo8jYc19ppG7YoTsrr2kEtLRbARTJho5oNXFTR6B7Peq/go-ipfs-chunker"
@@ -34,7 +34,9 @@ import (
 var log = logging.Logger("daseingosdk")
 
 const (
-	MAX_ADD_BLOCKS_SIZE = 10 // max add blocks size by sending msg
+	MAX_ADD_BLOCKS_SIZE     = 10 // max add blocks size by sending msg
+	MAX_RETRY_REQUEST_TIMES = 6  // max request retry times
+	MAX_REQUEST_TIMEWAIT    = 10 // request time wait in second
 )
 
 type Client struct {
@@ -130,7 +132,13 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 	if err != nil {
 		return err
 	}
-
+	server := nodeList[0]
+	core.InitParam(server)
+	c.node, err = core.NewNode(context.TODO())
+	c.peer, err = config.ParseBootstrapPeer(server)
+	if err != nil {
+		return err
+	}
 	exist, err := c.isPeerAlive(c.peer.ID())
 	if err != nil {
 		return err
@@ -139,13 +147,14 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 		return fmt.Errorf("peer is not alive:%s", c.peer.ID())
 	}
 
-	peer := peer.IDB58Encode(c.peer.ID())
 	for i, n := range nodeList {
-		if n == peer {
+		if n == server {
 			nodeList = append(nodeList[:i], nodeList[i+1:]...)
 			break
 		}
 	}
+	// get ids
+	nodeList = SplitNodeFullAddressToId(nodeList)
 	// split file to blocks
 	root, list, err := nodesFromFile(fileName, encrypt, encryptPassword)
 	if err != nil {
@@ -186,6 +195,18 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 			return err
 		}
 		log.Infof("txId:%x", rawTxId)
+		retry := 0
+		for {
+			if retry < MAX_RETRY_REQUEST_TIMES {
+				payOK, _ := request.IsFilePaid(storeFileInfo.FileHashStr)
+				if payOK {
+					log.Debug("loop check paid success")
+					break
+				}
+				retry++
+			}
+			time.Sleep(time.Duration(MAX_REQUEST_TIMEWAIT) * time.Second)
+		}
 	} else {
 	}
 	err = c.PreSendFile(root, list, copyNum, nodeList)
@@ -268,7 +289,7 @@ func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID, fileHashStr string, r
 	if err != nil {
 		return nil, err
 	}
-	var buf bytes.Buffer
+	// var buf bytes.Buffer
 	blocks, err := c.node.Exchange.GetBlocks(context.Background(), peerId, fileHashStr, CID, settleSlice)
 	if err != nil {
 		return nil, err
@@ -279,26 +300,32 @@ func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID, fileHashStr string, r
 		return nil, err
 	}
 
+	file, err := os.OpenFile(fileHashStr, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
 	linksNum := len(dagNode.Links())
 	if linksNum == 0 {
 		pb := new(ftpb.Data)
 		if err := proto.Unmarshal(dagNode.(*ml.ProtoNode).Data(), pb); err != nil {
 			return nil, err
 		}
-		n, err := buf.Write(pb.Data)
+		n, err := file.Write(pb.Data)
 		if err != nil || n == 0 {
 			return nil, err
 		}
 	} else {
 		for i := 0; i < linksNum; i++ {
-			childBuf, err := c.decodeBlock(dagNode.Links()[i].Cid, peerId, fileHashStr, request, nodeWalletAddr, blockSize)
+			_, err := c.decodeBlock(dagNode.Links()[i].Cid, peerId, fileHashStr, request, nodeWalletAddr, blockSize)
 			if err != nil {
 				return nil, err
 			}
-			buf.Write(childBuf)
+			// buf.Write(childBuf)
 		}
 	}
-	return buf.Bytes(), nil
+	// return buf.Bytes(), nil
+	return nil, nil
 }
 
 func (c *Client) isPeerAlive(idStr peer.ID) (bool, error) {

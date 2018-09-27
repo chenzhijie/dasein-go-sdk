@@ -1,15 +1,16 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"math/rand"
 	"os"
+	"time"
 
 	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
 
 	sdk "github.com/daseinio/dasein-go-sdk"
 	"github.com/daseinio/dasein-go-sdk/crypto"
-	"github.com/howeyc/gopass"
 )
 
 var smallTxt = "QmZyvDNq1gHEkH5USKLUSunZBBya4qox7w4dWGxnt41Zox"
@@ -20,19 +21,28 @@ var deleteTxt = "QmevhnWdtmz89BMXuuX5pSY2uZtqKLz7frJsrCojT5kmb6"
 
 // var node = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
 var node = "/ip4/127.0.0.1/tcp/4001/ipfs/Qmdkh8dBb8p99KGDhazTnNZJpM4hDx95NJtnSLGSKp5tTy"
-
 var log = logging.Logger("test")
 
 var encrypt = false
 var encryptPassword = "123456"
+var walletPwd = "pwd"
 var wallet = "./wallet.dat"
 var rpc = "http://127.0.0.1:20336"
 
-func testSendSmallFile() {
-	walletPwd, err := getPassword()
+func testSendFile(fileName string, rate, times uint64, copyNum int32) {
+	client, err := sdk.NewClient("", wallet, walletPwd, rpc)
 	if err != nil {
 		log.Error(err)
+		return
 	}
+	err = client.SendFile(fileName, rate, times, copyNum, encrypt, encryptPassword)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+}
+
+func testSendSmallFile() {
 	client, err := sdk.NewClient(node, wallet, walletPwd, rpc)
 	if err != nil {
 		log.Error(err)
@@ -45,7 +55,7 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("hello world223455\n")
+	smallF.WriteString("hello world2234556666789\n")
 	err = client.SendFile(smallFile, 1, 1, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
@@ -60,10 +70,6 @@ func testSendSmallFile() {
 }
 
 func testSendBigFile() {
-	walletPwd, err := getPassword()
-	if err != nil {
-		log.Error(err)
-	}
 	client, err := sdk.NewClient(node, wallet, walletPwd, rpc)
 	if err != nil {
 		log.Error(err)
@@ -77,7 +83,7 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	for i := 1; i < 40000; i++ {
+	for i := 1; i < 80000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 	err = client.SendFile(bigFile, 1, 1, 0, encrypt, encryptPassword)
@@ -92,13 +98,9 @@ func testSendBigFile() {
 	}
 }
 
-func testGetData() {
-	walletPwd, err := getPassword()
-	if err != nil {
-		log.Error(err)
-	}
+func testGetData(fileHashStr string) {
 	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
-	nodes, err := r.FindStoreFileNodes(smallTxt)
+	nodes, err := r.FindStoreFileNodes(fileHashStr)
 	if err != nil {
 		log.Error(err)
 		return
@@ -114,25 +116,23 @@ func testGetData() {
 
 	log.Info("-----------------------")
 	log.Info("Single Block Test")
-	// data, err := client.GetData("QmdYVqoNoRZ9uDbU9FVMkTkmjArhL9u4NWipaNLHMCtAcT", chosenNode.WalletAddr)
-	data, err := client.GetData("QmQHkNBsHaaYAQkHrDCYEJSYwtQGXfodMMJhmiEMPc5b4B", chosenNode.WalletAddr)
-	// data, err := client.GetData(smallTxt, chosenNode.WalletAddr)
+	_, err = client.GetData(fileHashStr, chosenNode.WalletAddr)
 	if err != nil {
 		log.Error(err)
 	}
-	file, err := os.Create("small")
-	if err != nil {
-		log.Error(err)
-	} else {
-		log.Infof("GetData %s success", smallTxt)
-	}
-	_, err = file.Write(data)
-	if err != nil {
-		log.Error(err)
-	}
-	file.Close()
+	// file, err := os.Create("small")
+	// if err != nil {
+	// 	log.Error(err)
+	// } else {
+	// 	log.Infof("GetData %s success", smallTxt)
+	// }
+	// _, err = file.Write(data)
+	// if err != nil {
+	// 	log.Error(err)
+	// }
+	// file.Close()
 	if encrypt {
-		crypto.AESDecryptFile("small", encryptPassword, "small-decrypted")
+		crypto.AESDecryptFile(fileHashStr, encryptPassword, fmt.Sprintf("%s-decrypted", fileHashStr))
 	}
 	log.Info("-----------------------")
 	// log.Info("Multi Block Test")
@@ -179,26 +179,32 @@ func testGetData() {
 	*/
 }
 
-func testDelData() {
-	walletPwd, err := getPassword()
-	if err != nil {
-		log.Error(err)
-	}
+func testDelData(fileHashStr string) {
 	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
 	nodes, err := r.FindStoreFileNodes(smallTxt)
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	file := "QmQHkNBsHaaYAQkHrDCYEJSYwtQGXfodMMJhmiEMPc5b4B"
-
-	err = r.DeleteFile(file)
-	fmt.Printf("delete file result:%s", err)
+	err = r.DeleteFile(fileHashStr)
 	if err != nil {
 		log.Error(err)
 		return
 	}
-	// time.Sleep(time.Duration(30) * time.Second)
+	log.Infof("delete file sucess:%s", fileHashStr)
+	retry := 0
+	for {
+		if retry > sdk.MAX_RETRY_REQUEST_TIMES {
+			log.Error("delete file failed timeout")
+			return
+		}
+		info, _ := r.GetFileInfo(fileHashStr)
+		if info == nil {
+			break
+		}
+		retry++
+		time.Sleep(time.Duration(sdk.MAX_REQUEST_TIMEWAIT) * time.Second)
+	}
 
 	for _, node := range nodes {
 		client, err := sdk.NewClient(node.Addr, wallet, walletPwd, rpc)
@@ -206,87 +212,62 @@ func testDelData() {
 			log.Error(err)
 			continue
 		}
-		err = client.DelData(file)
+		err = client.DelData(fileHashStr)
 		if err != nil {
-			log.Errorf("delete file:%s failed in node:%s", file, node.Addr)
+			log.Errorf("delete file:%s failed in node:%s", fileHashStr, node.Addr)
 		}
 	}
 }
 
-func testGetNodeList() {
-	walletPwd, err := getPassword()
-	if err != nil {
-		log.Error(err)
-	}
-	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
-	l, err := r.GetNodeList(0, 1)
-	if err != nil {
-		log.Error(err)
-	}
-	log.Infof("list:%v\n", l)
-}
-
-func testStoreFile() {
-	hashStr := "QmbZdTb7U6eKCmPRjdxBxjmAnAzLvUz2htmTuhqSAVrEKw"
-	walletPwd, err := getPassword()
-	if err != nil {
-		log.Error(err)
-	}
-	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
-	paid, err := r.IsFilePaid(hashStr)
-	if err != nil {
-		log.Error(err)
-	}
-	log.Infof("is paid:%t", paid)
-	if paid {
+func testByFlags() {
+	var fileName *string = flag.String("file", "", "Use --file <filesource>")
+	var operation *string = flag.String("op", "", "Use --op <send|get|del|testsendsmall|testsendbig>")
+	var isEncrypt *bool = flag.Bool("encrypt", false, "Encrypt file")
+	var ePwd *string = flag.String("encryptpwd", "", "Encrypt password")
+	var wPwd *string = flag.String("walletpwd", "pwd", "Wallet password")
+	var rates *int = flag.Int("challengerate", 100, "block count of challenge")
+	var times *int = flag.Int("challengetimes", 1, "challenge time")
+	var copynum *int = flag.Int("copynum", 0, "backup nodes number for copy")
+	flag.Parse()
+	if len(*operation) == 0 {
 		return
 	}
-	info := &sdk.StoreFileInfo{
-		FileHashStr:    hashStr,
-		KeepHours:      1,
-		BlockNum:       1,
-		BlockSize:      256,
-		ChallengeRate:  1,
-		ChallengeTimes: 1,
-		CopyNum:        0,
+	if len(*ePwd) > 0 {
+		encryptPassword = *ePwd
 	}
-	h, err := r.PayStoreFile(info, []byte("1"))
-	if err != nil {
-		log.Error(err)
-	}
-	log.Infof("list:%x\n", h)
-}
-
-func testGetFileProveDetails() {
-	walletPwd, err := getPassword()
-	if err != nil {
-		log.Error(err)
-	}
-	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
-	r.FindStoreFileNodes("QmZyvDNq1gHEkH5USKLUSunZBBya4qox7w4dWGxnt41Zox")
-}
-
-func getPassword() (string, error) {
-	testing := true
-	if testing {
-		return "pwd", nil
-	} else {
-		fmt.Printf("Password:")
-		pwd, err := gopass.GetPasswd()
-		if err != nil {
-			return "", err
+	walletPwd = *wPwd
+	encrypt = *isEncrypt
+	switch *operation {
+	case "send":
+		testSendFile(*fileName, uint64(*rates), uint64(*times), int32(*copynum))
+	case "get":
+		if len(*fileName) <= 0 {
+			log.Errorf("option: file is missing")
+			return
 		}
-		return string(pwd), nil
+		testGetData(*fileName)
+	case "del":
+		if len(*fileName) <= 0 {
+			log.Errorf("option: file is missing")
+			return
+		}
+		testDelData(*fileName)
+	case "testsendsmall":
+		testSendSmallFile()
+	case "testsendbig":
+		testSendBigFile()
 	}
 }
 
 func main() {
-	logging.SetLogLevel("test", "DEBUG")
-	logging.SetLogLevel("daseingosdk", "DEBUG")
-	logging.SetLogLevel("bitswap", "DEBUG")
+	logging.SetLogLevel("test", "INFO")
+	logging.SetLogLevel("daseingosdk", "INFO")
+	logging.SetLogLevel("bitswap", "INFO")
+	testByFlags()
+	// testDelFileAndGet()
 	// testSendSmallFile()
-	// testGetData()
-	testDelData()
+	// testGetData("QmafaFyC4DkLcaPTbhBrBxfUWB3BVWNeAnekzzYhgtkztD")
+	// testDelData()·
 	// testSendBigFile()
 	// testSendSmallFile()
 	// testGetNodeList()
