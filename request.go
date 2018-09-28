@@ -3,6 +3,7 @@ package dasein_go_sdk
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/ontio/ontology/common"
@@ -61,7 +62,8 @@ func (cr *ContractRequest) GetNodeList(fileSize uint64, copyNum int32) ([]string
 	// TODO: check storage service time is enough
 	nodeList := make([]string, 0)
 	for _, info := range infos.Item {
-		if info.RestVol < fileSize {
+		fileSizeInKb := uint64(math.Ceil(float64(fileSize) / 1024.0))
+		if info.RestVol < fileSizeInKb {
 			continue
 		}
 		fullAddress := string(info.NodeAddr)
@@ -117,10 +119,10 @@ type NodeInfo struct {
 
 func (cr *ContractRequest) FindStoreFileNodes(fileHashStr string) ([]*NodeInfo, error) {
 	details, err := cr.client.GetFileProveDetails(fileHashStr)
-	log.Debugf("get details:%d err:%s\n", details.ProveDetailNum, err)
 	if err != nil {
 		return nil, err
 	}
+	log.Debugf("get details:%d err:%s\n", details.ProveDetailNum, err)
 	nodes := make([]*NodeInfo, 0)
 	if details != nil {
 		for _, d := range details.ProveDetails {

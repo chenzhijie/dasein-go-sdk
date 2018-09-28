@@ -55,7 +55,7 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("123h123123ello 12393 world22345566667872722129\n")
+	smallF.WriteString("dbbsdubdasfasdsd 12393 world22345566667872722129 000 \n")
 	err = client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
@@ -83,10 +83,11 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	for i := 1; i < 80000; i++ {
+	for i := 440000; i < 450000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
-	err = client.SendFile(bigFile, 10, 10, 0, encrypt, encryptPassword)
+	log.Debugf("send big file")
+	err = client.SendFile(bigFile, 7, 2, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Errorf("send file err:%s", err)
 		return
@@ -254,9 +255,9 @@ func testByFlags() {
 }
 
 func main() {
-	logging.SetLogLevel("test", "INFO")
-	logging.SetLogLevel("daseingosdk", "INFO")
-	logging.SetLogLevel("bitswap", "INFO")
+	logging.SetLogLevel("test", "DEBUG")
+	logging.SetLogLevel("daseingosdk", "DEBUG")
+	logging.SetLogLevel("bitswap", "DEBUG")
 
 	testByFlags()
 	// testDelFileAndGet()

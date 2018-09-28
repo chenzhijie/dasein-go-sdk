@@ -114,6 +114,7 @@ func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, copyNum
 			cids = append(cids, dagNode.Cid())
 		}
 	}
+	log.Debugf("all cids length:%d", len(cids))
 	return c.node.Exchange.PreAddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), cids, copyNum, nodeList)
 }
 
@@ -160,6 +161,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 	if err != nil {
 		return err
 	}
+	log.Debugf("root:%s, list.len:%d", root.Cid().String(), len(list))
 
 	// check if file has paid
 	isPaid, err := request.IsFilePaid(root.Cid().String())
@@ -174,16 +176,16 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 			return err
 		}
 		blockSizeInKB := uint64(math.Ceil(float64(blockSize) / 1024.0))
-		log.Debugf("blocksize:%d, inkb:%d", blockSize, blockSizeInKB)
 		// prepay for store file
 		storeFileInfo := &StoreFileInfo{
 			FileHashStr:    root.Cid().String(),
 			ChallengeRate:  challengeRate,
 			ChallengeTimes: challengeTimes,
 			CopyNum:        uint64(copyNum),
-			BlockNum:       uint64(len(list)),
+			BlockNum:       uint64(len(list) + 1),
 			BlockSize:      blockSizeInKB,
 		}
+		log.Debugf("pay blocksize:%d, inkb:%d, blockNum:%d", blockSize, blockSizeInKB, len(list)+1)
 		paramsBuf, err := request.ProveParamSer(g, g0, pubKey, []byte(fileID), r, pairing)
 		if err != nil {
 			log.Errorf("serialzation prove params failed:%s", err)
@@ -208,7 +210,9 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 			time.Sleep(time.Duration(MAX_REQUEST_TIMEWAIT) * time.Second)
 		}
 	} else {
+		// TODO: check prove reaches copynumber
 	}
+	log.Debugf("has paid file:%s, blocknum:%d rate:%d, times:%d, copynum:%d", root.Cid().String(), len(list), challengeRate, challengeTimes, copyNum)
 	err = c.PreSendFile(root, list, copyNum, nodeList)
 	if err != nil {
 		log.Errorf("pre send file failed :%s", err)
@@ -225,6 +229,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 	// send root node
 	ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), []blocks.Block{root}, []int32{0}, [][]byte{tag}, copyNum, nodeList)
 	log.Infof("add root file to:%s ret:%v, err:%s", c.peer.ID(), ret, err)
+	log.Debugf("r:%s, pari:%s, tag:%v, hash:%s", r, pairing, tag, root.Cid().String())
 	if err != nil {
 		return err
 	}
@@ -258,6 +263,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 			}
 			otherTags = append(otherTags, tag)
 			log.Debugf("index:%v", otherIndxs)
+			log.Debugf("r:%s, pari:%s, tag:%v, hash:%s", r, pairing, tag, dagNode.Cid().String())
 			if len(otherBlks) >= blockSizePerMsg || i == len(list)-1 {
 				ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), otherBlks, otherIndxs, otherTags, copyNum, nodeList)
 				if err != nil {
@@ -341,7 +347,7 @@ func (c *Client) isPeerAlive(idStr peer.ID) (bool, error) {
 }
 
 // nodesFromFile open a local file and build dag nodes
-// return root, list, list include root node
+// return root, list, list not include root node
 func nodesFromFile(fileName string, encrypt bool, password string) (ipld.Node, []*helpers.UnixfsNode, error) {
 	cidVer := 0
 	hashFunStr := "sha2-256"
@@ -386,8 +392,26 @@ func nodesFromFile(fileName string, encrypt bool, password string) (ipld.Node, [
 	}
 	db := params.New(chnk)
 
+	var root ipld.Node
+	var list []*helpers.UnixfsNode
 	if tri {
-		return trickle.Layout(db)
+		root, list, err = trickle.Layout(db)
+	} else {
+		root, list, err = balanced.Layout(db)
 	}
-	return balanced.Layout(db)
+	if err != nil {
+		return root, list, err
+	}
+
+	for index, l := range list {
+		lNode, err := l.GetDagNode()
+		if err != nil {
+			continue
+		}
+		if lNode.Cid().String() == root.Cid().String() {
+			list = append(list[:index], list[index+1:]...)
+			break
+		}
+	}
+	return root, list, nil
 }

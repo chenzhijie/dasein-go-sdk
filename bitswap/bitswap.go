@@ -249,6 +249,7 @@ func (bs *Bitswap) AddBlocks(ctx context.Context, id peer.ID, fileHash string, b
 	}
 	err := bs.network.SendMessage(ctx, id, msg)
 	if err != nil {
+		log.Debugf("presend bitswap msg failed:%s", err)
 		return nil, err
 	}
 	stopTimeout := false
