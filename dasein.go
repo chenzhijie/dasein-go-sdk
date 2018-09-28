@@ -120,57 +120,34 @@ func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, copyNum
 
 // SendFile send a file to node with copy number
 func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes uint64, copyNum int32, encrypt bool, encryptPassword string) error {
-	// get nodeList
-	fileInfo, err := os.Stat(fileName)
+	fileStat, err := os.Stat(fileName)
 	if err != nil {
 		return err
 	}
 	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
 	if request == nil {
 		return errors.New("init contract requester failed in SendFile")
-	}
-	nodeList, err := request.GetNodeList(uint64(fileInfo.Size()), copyNum)
-	if err != nil {
-		return err
-	}
-	server := nodeList[0]
-	core.InitParam(server)
-	c.node, err = core.NewNode(context.TODO())
-	c.peer, err = config.ParseBootstrapPeer(server)
-	if err != nil {
-		return err
-	}
-	exist, err := c.isPeerAlive(c.peer.ID())
-	if err != nil {
-		return err
-	}
-	if !exist {
-		return fmt.Errorf("peer is not alive:%s", c.peer.ID())
+
 	}
 
-	for i, n := range nodeList {
-		if n == server {
-			nodeList = append(nodeList[:i], nodeList[i+1:]...)
-			break
-		}
+	// get nodeList
+	nodeList, err := request.GetNodeList(uint64(fileStat.Size()), copyNum)
+	if err != nil {
+		return err
 	}
-	// get ids
-	nodeList = SplitNodeFullAddressToId(nodeList)
+
 	// split file to blocks
 	root, list, err := nodesFromFile(fileName, encrypt, encryptPassword)
 	if err != nil {
 		return err
 	}
-	log.Debugf("root:%s, list.len:%d", root.Cid().String(), len(list))
+	fileHashStr := root.Cid().String()
+	log.Debugf("root:%s, list.len:%d", fileHashStr, len(list))
 
-	// check if file has paid
-	isPaid, err := request.IsFilePaid(root.Cid().String())
-	if err != nil {
-		return err
-	}
+	fileInfo, _ := request.GetFileInfo(fileHashStr)
 
 	g, g0, pubKey, privKey, fileID, r, pairing := PoR.Init(fileName)
-	if !isPaid {
+	if fileInfo == nil {
 		blockSize, err := root.Size()
 		if err != nil || blockSize == 0 {
 			return err
@@ -210,8 +187,64 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 			time.Sleep(time.Duration(MAX_REQUEST_TIMEWAIT) * time.Second)
 		}
 	} else {
-		// TODO: check prove reaches copynumber
+		return fmt.Errorf("file:%s has stored", fileHashStr)
+		// g, g0, pubKey, fileID, r, pairing, err = request.GetFileProveParams(fileInfo.FileProveParam)
+		// if err != nil {
+		// 	return err
+		// }
+		// storedNodes, err := request.GetStoreFileNodes(root.Cid().String())
+		// if err != nil {
+		// 	log.Errorf("get store file nodes err:%s", err)
+		// 	return err
+		// }
+
+		// if copyNum <= int32(len(storedNodes)) {
+		// 	return fmt.Errorf("the file:%s already store in %d nodes", root.Cid().String(), len(storedNodes))
+		// }
+		// // update nodelist
+		// newNodeList := make([]string, 0)
+		// for _, node := range nodeList {
+		// 	exist := false
+		// 	for _, storedNode := range storedNodes {
+		// 		if storedNode.Addr == node {
+		// 			exist = true
+		// 			break
+		// 		}
+		// 	}
+		// 	if !exist {
+		// 		newNodeList = append(newNodeList, node)
+		// 	}
+		// }
+		// log.Debugf("oldnodelist:%v, newNodelist:%v, storedNode:%v", nodeList, newNodeList, storedNodes)
+		// if copyNum+1 < int32(len(newNodeList)) {
+		// 	return fmt.Errorf("the file:%s copynum :%d less than nodelist len: %d ", root.Cid().String(), copyNum, len(newNodeList))
+		// }
+		// nodeList = newNodeList
 	}
+
+	server := nodeList[0]
+	core.InitParam(server)
+	c.node, err = core.NewNode(context.TODO())
+	c.peer, err = config.ParseBootstrapPeer(server)
+	if err != nil {
+		return err
+	}
+	exist, err := c.isPeerAlive(c.peer.ID())
+	if err != nil {
+		return err
+	}
+	if !exist {
+		return fmt.Errorf("peer is not alive:%s", c.peer.ID())
+	}
+
+	for i, n := range nodeList {
+		if n == server {
+			nodeList = append(nodeList[:i], nodeList[i+1:]...)
+			break
+		}
+	}
+	// get ids
+	nodeList = SplitNodeFullAddressToId(nodeList)
 	log.Debugf("has paid file:%s, blocknum:%d rate:%d, times:%d, copynum:%d", root.Cid().String(), len(list), challengeRate, challengeTimes, copyNum)
 	err = c.PreSendFile(root, list, copyNum, nodeList)
 	if err != nil {

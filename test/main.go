@@ -83,11 +83,11 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	for i := 440000; i < 450000; i++ {
+	for i := 800000; i < 900000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 	log.Debugf("send big file")
-	err = client.SendFile(bigFile, 7, 2, 0, encrypt, encryptPassword)
+	err = client.SendFile(bigFile, 10, 1, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Errorf("send file err:%s", err)
 		return
@@ -101,7 +101,7 @@ func testSendBigFile() {
 
 func testGetData(fileHashStr string) {
 	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
-	nodes, err := r.FindStoreFileNodes(fileHashStr)
+	nodes, err := r.GetStoreFileNodes(fileHashStr)
 	if err != nil {
 		log.Error(err)
 		return
@@ -177,7 +177,7 @@ func testGetData(fileHashStr string) {
 
 func testDelData(fileHashStr string) {
 	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
-	nodes, err := r.FindStoreFileNodes(smallTxt)
+	nodes, err := r.GetStoreFileNodes(smallTxt)
 	if err != nil {
 		log.Error(err)
 		return
@@ -254,12 +254,21 @@ func testByFlags() {
 	}
 }
 
+func testGetInfo() {
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	fileHashStr := "Qmb7Yrt5F3TN7GnsKWtqz9yK99HEd7Y4hh3FVe3L6VTFm6"
+	info, _ := r.GetFileInfo(fileHashStr)
+	_, _, _, _, _, p, _ := r.GetFileProveParams(info.FileProveParam)
+	fmt.Printf("paring:%s\n", p)
+}
+
 func main() {
 	logging.SetLogLevel("test", "DEBUG")
 	logging.SetLogLevel("daseingosdk", "DEBUG")
 	logging.SetLogLevel("bitswap", "DEBUG")
 
 	testByFlags()
+	// testGetInfo()
 	// testDelFileAndGet()
 	// testSendSmallFile()
 	// testGetData("QmafaFyC4DkLcaPTbhBrBxfUWB3BVWNeAnekzzYhgtkztD")

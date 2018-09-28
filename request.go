@@ -6,9 +6,9 @@ import (
 	"math"
 	"strings"
 
+	"github.com/daseinio/dasein-wallet-api/client"
+	"github.com/daseinio/dasein-wallet-api/core"
 	"github.com/ontio/ontology/common"
-	"github.com/qingche123/dasein-wallet-api/client"
-	"github.com/qingche123/dasein-wallet-api/core"
 )
 
 const (
@@ -52,6 +52,7 @@ type StoreFileInfo struct {
 	ChallengeRate  uint64
 	ChallengeTimes uint64
 	CopyNum        uint64
+	FileProveParam []byte
 }
 
 func (cr *ContractRequest) GetNodeList(fileSize uint64, copyNum int32) ([]string, error) {
@@ -80,6 +81,15 @@ func (cr *ContractRequest) ProveParamSer(g []byte, g0 []byte, pubKey []byte, fil
 	return cr.client.ProveParamSer(g, g0, pubKey, fileId, r, pairing)
 }
 
+func (c *ContractRequest) GetFileProveParams(fileProveParam []byte) ([]byte, []byte, []byte, string, string, string, error) {
+	core := core.Init(c.client.WalletPath, string(c.client.Password), c.client.OntRpcSrvAddr)
+	p, err := core.ProveParamDes(fileProveParam)
+	if err != nil {
+		return nil, nil, nil, "", "", "", err
+	}
+	return p.G, p.G0, p.PubKey, string(p.FileId), string(p.R), string(p.Paring), nil
+}
+
 func (cr *ContractRequest) PayStoreFile(info *StoreFileInfo, proveParams []byte) ([]byte, error) {
 	return cr.client.StoreFile(info.FileHashStr, info.BlockNum, info.BlockSize, info.ChallengeRate, info.ChallengeTimes, info.CopyNum, proveParams)
 }
@@ -96,6 +106,7 @@ func (cr *ContractRequest) GetFileInfo(fileHashStr string) (*StoreFileInfo, erro
 		ChallengeRate:  info.ChallengeRate,
 		ChallengeTimes: info.ChallengeTimes,
 		CopyNum:        info.CopyNum,
+		FileProveParam: info.FileProveParam,
 	}, nil
 }
 
@@ -117,17 +128,17 @@ type NodeInfo struct {
 	WalletAddr common.Address // peer wallet address in hash
 }
 
-func (cr *ContractRequest) FindStoreFileNodes(fileHashStr string) ([]*NodeInfo, error) {
+func (cr *ContractRequest) GetStoreFileNodes(fileHashStr string) ([]*NodeInfo, error) {
 	details, err := cr.client.GetFileProveDetails(fileHashStr)
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("get details:%d err:%s\n", details.ProveDetailNum, err)
 	nodes := make([]*NodeInfo, 0)
 	if details != nil {
+		log.Debugf("get details:%d err:%s\n", details.ProveDetailNum, err)
 		for _, d := range details.ProveDetails {
 			log.Debugf("addr:%s, time:%d", string(d.NodeAddr), d.ProveTimes)
-			if len(d.NodeAddr) > 0 {
+			if len(d.NodeAddr) > 0 && d.ProveTimes > 0 {
 				nInfo := &NodeInfo{
 					Addr:       string(d.NodeAddr),
 					WalletAddr: d.WalletAddr,
@@ -135,6 +146,8 @@ func (cr *ContractRequest) FindStoreFileNodes(fileHashStr string) ([]*NodeInfo, 
 				nodes = append(nodes, nInfo)
 			}
 		}
+	} else {
+		log.Debugf("get details failed, details is nil")
 	}
 	return nodes, nil
 }
