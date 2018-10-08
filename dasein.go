@@ -65,6 +65,8 @@ func NewClient(server, wallet, password, rpc string) (*Client, error) {
 	return client, err
 }
 
+// GetData get a block from a specific remote node
+// If the block is a root dag node, this function will get all blocks recursively
 func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) ([]byte, error) {
 	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
 	if request == nil {
@@ -84,6 +86,20 @@ func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) ([]byt
 		return nil, err
 	}
 	log.Debugf("txHash:%x", txHash)
+	retry := 0
+	for {
+		log.Debugf("try get pledge")
+		if retry < MAX_RETRY_REQUEST_TIMES {
+			err := request.GetReadFilePledge(cidString)
+			if err == nil {
+				log.Debug("loop get pledge success")
+				break
+			}
+			retry++
+		}
+		log.Debugf("get pledge failed")
+		time.Sleep(time.Duration(MAX_REQUEST_TIMEWAIT) * time.Second)
+	}
 	CID, err := cid.Decode(cidString)
 	if err != nil {
 		return nil, err
@@ -96,6 +112,9 @@ func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) ([]byt
 	c.rfm.RemoveSliceId(cidString)
 	return buf, err
 }
+
+// DelData delete a block of all remote nodes which keep the block
+// If the block is a dag root node, the nodes will delete all blocks recusively
 func (c *Client) DelData(cidString string) error {
 	CID, err := cid.Decode(cidString)
 	if err != nil {
@@ -105,6 +124,7 @@ func (c *Client) DelData(cidString string) error {
 }
 
 // PreSendFile send file information to node for checking the storage requirement
+// This function does not send any block data.
 func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, copyNum int32, nodeList []string) error {
 	cids := make([]*cid.Cid, 0)
 	cids = append(cids, root.Cid())

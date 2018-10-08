@@ -20,7 +20,6 @@ var bigTxt = "QmW5CME8vkw3ndeuDuf5a5oL9x55yPWfhF4fz4R6XTMTBk"
 var deleteTxt = "QmevhnWdtmz89BMXuuX5pSY2uZtqKLz7frJsrCojT5kmb6"
 
 // var node = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
-var node = "/ip4/127.0.0.1/tcp/4001/ipfs/Qmdkh8dBb8p99KGDhazTnNZJpM4hDx95NJtnSLGSKp5tTy"
 var log = logging.Logger("test")
 
 var encrypt = false
@@ -43,7 +42,7 @@ func testSendFile(fileName string, rate, times uint64, copyNum int32) {
 }
 
 func testSendSmallFile() {
-	client, err := sdk.NewClient(node, wallet, walletPwd, rpc)
+	client, err := sdk.NewClient("", wallet, walletPwd, rpc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -55,7 +54,7 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("dbbsdubdasfasdsd 12393 world22345566667872722129 000 \n")
+	smallF.WriteString("a12398bhvwscnshadcfhuwsd \n")
 	err = client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
@@ -70,7 +69,7 @@ func testSendSmallFile() {
 }
 
 func testSendBigFile() {
-	client, err := sdk.NewClient(node, wallet, walletPwd, rpc)
+	client, err := sdk.NewClient("", wallet, walletPwd, rpc)
 	if err != nil {
 		log.Error(err)
 		return
@@ -83,7 +82,7 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	for i := 800000; i < 900000; i++ {
+	for i := 900000; i < 1000000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 	log.Debugf("send big file")

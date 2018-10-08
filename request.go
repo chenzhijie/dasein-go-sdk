@@ -169,6 +169,14 @@ func (cr *ContractRequest) PledgeForReadFile(fileHashStr string, nodeWalletAddr 
 	return cr.client.FsReadFilePledge(fileHashStr, nodeWalletAddr, fee)
 }
 
+func (cr *ContractRequest) GetReadFilePledge(fileHashStr string) error {
+	_, err := cr.client.FsGetFileReadPledge(fileHashStr)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (cr *ContractRequest) GenFileReadSettleSlice(fileHashStr string, payTo common.Address, blockNum, blockSize uint64, sliceId uint64) ([]byte, error) {
 	if cr.setting == nil {
 		err := cr.updateSetting()
