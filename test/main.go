@@ -82,11 +82,12 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	for i := 900000; i < 1000000; i++ {
+	start := 1410000
+	for i := start; i < start+10000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 	log.Debugf("send big file")
-	err = client.SendFile(bigFile, 10, 1, 0, encrypt, encryptPassword)
+	err = client.SendFile(bigFile, 200, 1, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Errorf("send file err:%s", err)
 		return

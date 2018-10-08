@@ -242,20 +242,30 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 		// nodeList = newNodeList
 	}
 
-	server := nodeList[0]
-	core.InitParam(server)
-	c.node, err = core.NewNode(context.TODO())
-	c.peer, err = config.ParseBootstrapPeer(server)
-	if err != nil {
-		return err
+	var server string
+	for _, server = range nodeList {
+		core.InitParam(server)
+		c.node, err = core.NewNode(context.TODO())
+		c.peer, err = config.ParseBootstrapPeer(server)
+		if err != nil {
+			log.Debugf("parse bootstrap peer failed:%s", err)
+			continue
+		}
+		peerInfo := c.node.Peerstore.PeerInfo(c.peer.ID())
+		if len(peerInfo.Addrs) == 0 {
+			continue
+		}
+		err := c.node.PeerHost.Connect(context.TODO(), peerInfo)
+		if err != nil {
+			log.Debugf("connect peer err:%s", err)
+			continue
+		}
+		break
 	}
-	exist, err := c.isPeerAlive(c.peer.ID())
-	if err != nil {
-		return err
+	if len(server) == 0 {
+		return fmt.Errorf("no online nodes from nodeList")
 	}
-	if !exist {
-		return fmt.Errorf("peer is not alive:%s", c.peer.ID())
-	}
+	log.Debugf("nodelist:%v, store to :%s", nodeList, server)
 
 	for i, n := range nodeList {
 		if n == server {
@@ -282,7 +292,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 	// send root node
 	ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), []blocks.Block{root}, []int32{0}, [][]byte{tag}, copyNum, nodeList)
 	log.Infof("add root file to:%s ret:%v, err:%s", c.peer.ID(), ret, err)
-	log.Debugf("r:%s, pari:%s, tag:%v, hash:%s", r, pairing, tag, root.Cid().String())
+	// log.Debugf("r:%s, pari:%s, tag:%v, hash:%s", r, pairing, tag, root.Cid().String())
 	if err != nil {
 		return err
 	}
