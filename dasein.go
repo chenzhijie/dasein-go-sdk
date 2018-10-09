@@ -37,6 +37,8 @@ const (
 	MAX_ADD_BLOCKS_SIZE     = 10 // max add blocks size by sending msg
 	MAX_RETRY_REQUEST_TIMES = 6  // max request retry times
 	MAX_REQUEST_TIMEWAIT    = 10 // request time wait in second
+	MIN_CHALLENGE_RATE      = 10 // min challenge blocks count <==> rate
+	MIN_CHALLENGE_TIMES     = 2  // min challenge times
 )
 
 type Client struct {
@@ -140,6 +142,12 @@ func (c *Client) PreSendFile(root ipld.Node, list []*helpers.UnixfsNode, copyNum
 
 // SendFile send a file to node with copy number
 func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes uint64, copyNum int32, encrypt bool, encryptPassword string) error {
+	if challengeRate < MIN_CHALLENGE_RATE {
+		return fmt.Errorf("challenge rate must more than %d", MIN_CHALLENGE_RATE)
+	}
+	if challengeTimes < MIN_CHALLENGE_TIMES {
+		return fmt.Errorf("challenge times must more than %d", MIN_CHALLENGE_TIMES)
+	}
 	fileStat, err := os.Stat(fileName)
 	if err != nil {
 		return err

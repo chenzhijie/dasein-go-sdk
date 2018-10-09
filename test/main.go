@@ -54,8 +54,8 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("a12398bhvwscnshadcfhuwsd \n")
-	err = client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
+	smallF.WriteString("abcd12398bhvwscnshadcfhuwsd \n")
+	err = client.SendFile(smallFile, 1000, 3, 2, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
 		return
@@ -177,12 +177,7 @@ func testGetData(fileHashStr string) {
 
 func testDelData(fileHashStr string) {
 	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
-	nodes, err := r.GetStoreFileNodes(smallTxt)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-	err = r.DeleteFile(fileHashStr)
+	err := r.DeleteFile(fileHashStr)
 	if err != nil {
 		log.Error(err)
 		return
@@ -202,6 +197,7 @@ func testDelData(fileHashStr string) {
 		time.Sleep(time.Duration(sdk.MAX_REQUEST_TIMEWAIT) * time.Second)
 	}
 
+	nodes, _ := r.GetStoreFileNodes(smallTxt)
 	for _, node := range nodes {
 		client, err := sdk.NewClient(node.Addr, wallet, walletPwd, rpc)
 		if err != nil {
