@@ -12,6 +12,7 @@ import (
 
 	logging "gx/ipfs/QmRb5jh8z2E8hMGN2tkvs1yHynUanqnZ3UeKwgN1i9P1F8/go-log"
 	chunker "gx/ipfs/QmWo8jYc19ppG7YoTsrr2kEtLRbARTJho5oNXFTR6B7Peq/go-ipfs-chunker"
+	net "gx/ipfs/QmXfkENeeBvh3zYA51MaSdGUdBjhQ99cP5WQe8zgr6wchG/go-libp2p-net"
 	"gx/ipfs/QmZ4Qi3GaRbjcx28Sme5eMH7RQjGkt8wHxt2a65oLaeFEV/gogo-protobuf/proto"
 	"gx/ipfs/QmZoWKhxUmZ2seW4BzX6fJkNR8hh9PsGModr7q171yq2SS/go-libp2p-peer"
 	mh "gx/ipfs/QmZyZDi491cCNTLfAhwcaDii2Kg4pwKRkhqQzURGDvY6ua/go-multihash"
@@ -96,6 +97,8 @@ func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) ([]byt
 			if err == nil {
 				log.Debug("loop get pledge success")
 				break
+			} else {
+				log.Debugf("get pledge:%s failed:%s", cidString, err)
 			}
 			retry++
 		}
@@ -251,23 +254,20 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 	}
 
 	var server string
-	for _, server = range nodeList {
-		core.InitParam(server)
+	for _, s := range nodeList {
+		core.InitParam(s)
 		c.node, err = core.NewNode(context.TODO())
-		c.peer, err = config.ParseBootstrapPeer(server)
+		c.peer, err = config.ParseBootstrapPeer(s)
 		if err != nil {
 			log.Debugf("parse bootstrap peer failed:%s", err)
 			continue
 		}
 		peerInfo := c.node.Peerstore.PeerInfo(c.peer.ID())
-		if len(peerInfo.Addrs) == 0 {
+		log.Debugf("addrs:%v, connectedness:%d\n", peerInfo.Addrs, c.node.PeerHost.Network().Connectedness(c.peer.ID()))
+		if len(peerInfo.Addrs) == 0 || c.node.PeerHost.Network().Connectedness(c.peer.ID()) != net.Connected {
 			continue
 		}
-		err := c.node.PeerHost.Connect(context.TODO(), peerInfo)
-		if err != nil {
-			log.Debugf("connect peer err:%s", err)
-			continue
-		}
+		server = s
 		break
 	}
 	if len(server) == 0 {

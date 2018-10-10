@@ -54,8 +54,8 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("abcd12398bhvwscnshadcfhuwsd \n")
-	err = client.SendFile(smallFile, 1000, 3, 2, encrypt, encryptPassword)
+	smallF.WriteString("asdhushds123dsdw111asdsdabcdefsd12398bhvwscnshadcfhuwsd \n")
+	err = client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
 		return
@@ -212,13 +212,13 @@ func testDelData(fileHashStr string) {
 }
 
 func testByFlags() {
-	var isEncrypt *bool = flag.Bool("encrypt", false, "Encrypt file")
-	var ePwd *string = flag.String("encryptpwd", "", "Encrypt password")
-	var wPwd *string = flag.String("walletpwd", "pwd", "Wallet password")
-	var rates *int = flag.Int("challengerate", 100, "block count of challenge")
-	var times *int = flag.Int("challengetimes", 1, "challenge time")
-	var copynum *int = flag.Int("copynum", 0, "backup nodes number for copy")
-	flag.Parse()
+	isEncrypt := flag.Bool("encrypt", false, "Encrypt file")
+	ePwd := flag.String("encryptpwd", "", "Encrypt password")
+	wPwd := flag.String("walletpwd", "pwd", "Wallet password")
+	rates := flag.Int("challengerate", 10, "block count of challenge")
+	times := flag.Int("challengetimes", 3, "challenge time")
+	copynum := flag.Int("copynum", 0, "backup nodes number for copy")
+
 	if len(os.Args) < 2 {
 		return
 	}
@@ -229,6 +229,9 @@ func testByFlags() {
 			return
 		}
 		fileName = os.Args[2]
+		flag.CommandLine.Parse(os.Args[3:])
+	} else {
+		flag.CommandLine.Parse(os.Args[2:])
 	}
 
 	if len(*ePwd) > 0 {
