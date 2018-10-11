@@ -54,8 +54,8 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("asdhushds123dsdw111asdsdabcdefsd12398bhvwscnshadcfhuwsd \n")
-	err = client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
+	smallF.WriteString("asdhuszxasdfsdaubcubhdasdhu232323bs123dsdw111asdsdabcdefsd12398bhvwscnshadcfhuwsd \n")
+	err = client.SendFile(smallFile, 1000, 3, 1, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
 		return
@@ -182,7 +182,6 @@ func testDelData(fileHashStr string) {
 		log.Error(err)
 		return
 	}
-	log.Infof("delete file sucess:%s", fileHashStr)
 	retry := 0
 	for {
 		if retry > sdk.MAX_RETRY_REQUEST_TIMES {
@@ -191,6 +190,7 @@ func testDelData(fileHashStr string) {
 		}
 		info, _ := r.GetFileInfo(fileHashStr)
 		if info == nil {
+			log.Infof("delete file sucess:%s", fileHashStr)
 			break
 		}
 		retry++

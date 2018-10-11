@@ -281,8 +281,6 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 			break
 		}
 	}
-	// get ids
-	nodeList = SplitNodeFullAddressToId(nodeList)
 	log.Debugf("has paid file:%s, blocknum:%d rate:%d, times:%d, copynum:%d", root.Cid().String(), len(list), challengeRate, challengeTimes, copyNum)
 	err = c.PreSendFile(root, list, copyNum, nodeList)
 	if err != nil {
@@ -295,8 +293,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 		log.Errorf("generate root tag failed:%s", err)
 		return err
 	}
-	log.Infof("root tag:%d", len(tag))
-
+	log.Debugf("root tag:%v, r:%s, pari:%s", tag, r, pairing)
 	// send root node
 	ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), []blocks.Block{root}, []int32{0}, [][]byte{tag}, copyNum, nodeList)
 	log.Infof("add root file to:%s ret:%v, err:%s", c.peer.ID(), ret, err)
@@ -333,8 +330,8 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 				return err
 			}
 			otherTags = append(otherTags, tag)
-			log.Debugf("index:%v", otherIndxs)
-			log.Debugf("r:%s, pari:%s, tag:%v, hash:%s", r, pairing, tag, dagNode.Cid().String())
+			log.Debugf("index:%v tag:%v, hash:%s", otherIndxs, tag, dagNode.Cid().String())
+
 			if len(otherBlks) >= blockSizePerMsg || i == len(list)-1 {
 				ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), otherBlks, otherIndxs, otherTags, copyNum, nodeList)
 				if err != nil {

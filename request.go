@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strings"
 
 	"github.com/daseinio/dasein-wallet-api/client"
 	"github.com/daseinio/dasein-wallet-api/core"
@@ -211,21 +210,4 @@ func (cr *ContractRequest) updateSetting() error {
 		gasForChallenge:  fsSetting.GasForChallenge,
 	}
 	return nil
-}
-
-func SplitNodeFullAddressToId(nodeList []string) []string {
-	ids := make([]string, 0)
-	for _, fullAddress := range nodeList {
-		parts := strings.Split(fullAddress, "/")
-		if len(parts) == 0 {
-			continue
-		}
-
-		id := parts[len(parts)-1]
-		if len(id) <= 0 {
-			continue
-		}
-		ids = append(ids, id)
-	}
-	return ids
 }
