@@ -54,8 +54,8 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("asdhuszxasdfsdaubcubhdasdhu232323bs123dsdw111asdsdabcdefsd12398bhvwscnshadcfhuwsd \n")
-	err = client.SendFile(smallFile, 1000, 3, 1, encrypt, encryptPassword)
+	smallF.WriteString("aa123123 \n")
+	err = client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
 		return
@@ -177,6 +177,8 @@ func testGetData(fileHashStr string) {
 
 func testDelData(fileHashStr string) {
 	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	nodes, _ := r.GetStoreFileNodes(fileHashStr)
+
 	err := r.DeleteFile(fileHashStr)
 	if err != nil {
 		log.Error(err)
@@ -190,15 +192,14 @@ func testDelData(fileHashStr string) {
 		}
 		info, _ := r.GetFileInfo(fileHashStr)
 		if info == nil {
-			log.Infof("delete file sucess:%s", fileHashStr)
 			break
 		}
 		retry++
 		time.Sleep(time.Duration(sdk.MAX_REQUEST_TIMEWAIT) * time.Second)
 	}
 
-	nodes, _ := r.GetStoreFileNodes(smallTxt)
 	for _, node := range nodes {
+		log.Debugf("delete file from node: %v", node.Addr)
 		client, err := sdk.NewClient(node.Addr, wallet, walletPwd, rpc)
 		if err != nil {
 			log.Error(err)
@@ -209,6 +210,7 @@ func testDelData(fileHashStr string) {
 			log.Errorf("delete file:%s failed in node:%s", fileHashStr, node.Addr)
 		}
 	}
+	log.Infof("delete file sucess:%s", fileHashStr)
 }
 
 func testByFlags() {
