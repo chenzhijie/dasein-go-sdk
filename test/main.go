@@ -19,7 +19,6 @@ var bigTxt = "QmW5CME8vkw3ndeuDuf5a5oL9x55yPWfhF4fz4R6XTMTBk"
 //var largeTxt = "QmU7QRQpSZhukKsraEaa23Re1AzLqpFvyHPwayseVKTbFp"
 var deleteTxt = "QmevhnWdtmz89BMXuuX5pSY2uZtqKLz7frJsrCojT5kmb6"
 
-// var node = "/ip4/127.0.0.1/tcp/4001/ipfs/QmR1AqNQBqAjPeLswq86dkJZ5Y7ACVGoXzz2K8tz6MHyUB"
 var log = logging.Logger("test")
 
 var encrypt = false
@@ -54,7 +53,7 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("aa123123 \n")
+	smallF.WriteString("aa123123456s \n")
 	err = client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
@@ -82,12 +81,12 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	start := 1410000
-	for i := start; i < start+10000; i++ {
+	start := 1510000
+	for i := start; i < start+50000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 	log.Debugf("send big file")
-	err = client.SendFile(bigFile, 200, 1, 0, encrypt, encryptPassword)
+	err = client.SendFile(bigFile, 200, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Errorf("send file err:%s", err)
 		return
@@ -181,7 +180,7 @@ func testDelData(fileHashStr string) {
 
 	err := r.DeleteFile(fileHashStr)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("delete file failed in contract:%s", err)
 		return
 	}
 	retry := 0
@@ -198,6 +197,11 @@ func testDelData(fileHashStr string) {
 		time.Sleep(time.Duration(sdk.MAX_REQUEST_TIMEWAIT) * time.Second)
 	}
 
+	err = sdk.DelStoreFileInfo(fileHashStr)
+	if err != nil {
+		log.Errorf("delete local store file infos failed:%s", err)
+	}
+
 	for _, node := range nodes {
 		log.Debugf("delete file from node: %v", node.Addr)
 		client, err := sdk.NewClient(node.Addr, wallet, walletPwd, rpc)
@@ -207,7 +211,7 @@ func testDelData(fileHashStr string) {
 		}
 		err = client.DelData(fileHashStr)
 		if err != nil {
-			log.Errorf("delete file:%s failed in node:%s", fileHashStr, node.Addr)
+			log.Errorf("delete file:%s failed in node:%s, err:%s", fileHashStr, node.Addr, err)
 		}
 	}
 	log.Infof("delete file sucess:%s", fileHashStr)
