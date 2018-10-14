@@ -70,52 +70,55 @@ func NewClient(server, wallet, password, rpc string) (*Client, error) {
 
 // GetData get a block from a specific remote node
 // If the block is a root dag node, this function will get all blocks recursively
-func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) ([]byte, error) {
+func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) error {
 	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
 	if request == nil {
-		return nil, errors.New("init contract requester fail in GetData")
+		return errors.New("init contract requester fail in GetData")
 	}
 	fileInfo, err := request.GetFileInfo(cidString)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	fee, err := request.CalculateReadFee(fileInfo, cidString)
-	if err != nil {
-		return nil, err
-	}
-	log.Infof("fee:%d", fee)
-	txHash, err := request.PledgeForReadFile(cidString, nodeWalletAddr, fee)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("txHash:%x", txHash)
-	retry := 0
-	for {
-		log.Debugf("try get pledge")
-		if retry < MAX_RETRY_REQUEST_TIMES {
-			err := request.GetReadFilePledge(cidString)
-			if err == nil {
+
+	if !request.IsReadFilePledgeExist(cidString) {
+		plans := make(map[common.Address]uint64, 0)
+		plans[nodeWalletAddr] = fileInfo.FileBlockNum
+		txHash, err := request.PledgeForReadFile(cidString, plans)
+		if err != nil {
+			return err
+		}
+		log.Debugf("txHash:%x", txHash)
+		retry := 0
+		for {
+			log.Debugf("try get pledge")
+			if retry > MAX_RETRY_REQUEST_TIMES {
+				return errors.New("check read pledge tx failed")
+			}
+			if request.IsReadFilePledgeExist(cidString) {
 				log.Debug("loop get pledge success")
 				break
-			} else {
-				log.Debugf("get pledge:%s failed:%s", cidString, err)
 			}
 			retry++
+			time.Sleep(time.Duration(MAX_REQUEST_TIMEWAIT) * time.Second)
 		}
-		log.Debugf("get pledge failed")
-		time.Sleep(time.Duration(MAX_REQUEST_TIMEWAIT) * time.Second)
+	}
+	log.Debug("has paid read pledge")
+
+	err = c.fm.NewReadFile(cidString)
+	if err != nil {
+		return err
 	}
 	CID, err := cid.Decode(cidString)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	buf, err := c.decodeBlock(CID, c.peer.ID(), cidString, request, nodeWalletAddr, fileInfo.BlockSize)
+	err = c.decodeBlock(CID, c.peer.ID(), cidString, request, nodeWalletAddr, fileInfo.FileBlockSize)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	c.fm.RemoveSliceId(cidString)
-	return buf, err
+	c.fm.RemoveReadFile(cidString)
+	return err
 }
 
 // DelData delete a block of all remote nodes which keep the block
@@ -318,15 +321,6 @@ func (c *Client) payForSendFile(fileName string, root ipld.Node, challengeRate, 
 		}
 
 		blockSizeInKB := uint64(math.Ceil(float64(blockSize) / 1024.0))
-		// prepay for store file
-		storeFileInfo := &StoreFileInfo{
-			FileHashStr:    root.Cid().String(),
-			ChallengeRate:  challengeRate,
-			ChallengeTimes: challengeTimes,
-			CopyNum:        copyNum,
-			BlockNum:       blockNum,
-			BlockSize:      blockSizeInKB,
-		}
 		log.Debugf("pay blocksize:%d, inkb:%d, blockNum:%d", blockSize, blockSizeInKB, blockNum)
 		g, g0, pubKey, privKey, fileID, r, pairing := PoR.Init(fileName)
 		paramsBuf, err = request.ProveParamSer(g, g0, pubKey, []byte(fileID), r, pairing)
@@ -335,7 +329,7 @@ func (c *Client) payForSendFile(fileName string, root ipld.Node, challengeRate, 
 			log.Errorf("serialzation prove params failed:%s", err)
 			return nil, nil, err
 		}
-		rawTxId, err := request.PayStoreFile(storeFileInfo, paramsBuf)
+		rawTxId, err := request.PayStoreFile(fileHashStr, blockNum, blockSizeInKB, challengeRate, challengeTimes, copyNum, paramsBuf)
 		if err != nil {
 			log.Errorf("pay store file order failed:%s", err)
 			return nil, nil, err
@@ -346,7 +340,7 @@ func (c *Client) payForSendFile(fileName string, root ipld.Node, challengeRate, 
 			if retry > MAX_RETRY_REQUEST_TIMES {
 				return nil, nil, fmt.Errorf("retry request pay file tx failed")
 			}
-			payOK, _ := request.IsFilePaid(storeFileInfo.FileHashStr)
+			payOK, _ := request.IsFilePaid(fileHashStr)
 			if payOK {
 				log.Debug("loop check paid success")
 				break
@@ -392,50 +386,64 @@ func (c *Client) preSendFile(root ipld.Node, list []*helpers.UnixfsNode, copyNum
 	return c.node.Exchange.PreAddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), cids, copyNum, nodeList)
 }
 
-func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID, fileHashStr string, request *ContractRequest, nodeWalletAddr common.Address, blockSize uint64) ([]byte, error) {
-	// sliceId equal to blockIndex
-	sliceId := c.fm.IncreAndGetSliceId(fileHashStr)
-	settleSlice, err := request.GenFileReadSettleSlice(fileHashStr, nodeWalletAddr, sliceId, blockSize, sliceId)
-	if err != nil {
-		return nil, err
-	}
-	// var buf bytes.Buffer
-	blocks, err := c.node.Exchange.GetBlocks(context.Background(), peerId, fileHashStr, CID, settleSlice)
-	if err != nil {
-		return nil, err
-	}
-
-	dagNode, err := ml.DecodeProtobufBlock(blocks[0])
-	if err != nil {
-		return nil, err
-	}
-
-	file, err := os.OpenFile(fileHashStr, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	linksNum := len(dagNode.Links())
-	if linksNum == 0 {
-		pb := new(ftpb.Data)
-		if err := proto.Unmarshal(dagNode.(*ml.ProtoNode).Data(), pb); err != nil {
-			return nil, err
+func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID, fileHashStr string, request *ContractRequest, nodeWalletAddr common.Address, blockSize uint64) error {
+	hasRead := c.fm.IsBlockRead(fileHashStr, nodeWalletAddr.ToBase58(), CID.String())
+	log.Debugf("has read:%s %t", CID.String(), hasRead)
+	childs := make([]string, 0)
+	if !hasRead {
+		// sliceId equal to blockCount
+		nextSliceId := uint64(c.fm.GetReadNodeSliceId(fileHashStr, nodeWalletAddr.ToBase58()) + 1)
+		settleSlice, err := request.GenFileReadSettleSlice(fileHashStr, nodeWalletAddr, nextSliceId)
+		if err != nil {
+			return err
 		}
-		n, err := file.Write(pb.Data)
-		if err != nil || n == 0 {
-			return nil, err
+		// var buf bytes.Buffer
+		blocks, err := c.node.Exchange.GetBlocks(context.Background(), peerId, fileHashStr, CID, settleSlice)
+		if err != nil {
+			return err
+		}
+
+		dagNode, err := ml.DecodeProtobufBlock(blocks[0])
+		if err != nil {
+			return err
+		}
+
+		file, err := os.OpenFile(fileHashStr, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0666)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		linksNum := len(dagNode.Links())
+
+		for _, l := range dagNode.Links() {
+			childs = append(childs, l.Cid.String())
+		}
+		c.fm.ReceivedBlockFromNode(fileHashStr, CID.String(), nodeWalletAddr.ToBase58(), childs)
+		if linksNum == 0 {
+			pb := new(ftpb.Data)
+			if err := proto.Unmarshal(dagNode.(*ml.ProtoNode).Data(), pb); err != nil {
+				return err
+			}
+			n, err := file.Write(pb.Data)
+			if err != nil || n == 0 {
+				return err
+			}
 		}
 	} else {
-		for i := 0; i < linksNum; i++ {
-			_, err := c.decodeBlock(dagNode.Links()[i].Cid, peerId, fileHashStr, request, nodeWalletAddr, blockSize)
-			if err != nil {
-				return nil, err
-			}
-			// buf.Write(childBuf)
+		childs = c.fm.GetBlockChilds(fileHashStr, nodeWalletAddr.ToBase58(), CID.String())
+	}
+
+	for i := 0; i < len(childs); i++ {
+		childCid, err := cid.Decode(childs[i])
+		if err != nil {
+			return err
+		}
+		err = c.decodeBlock(childCid, peerId, fileHashStr, request, nodeWalletAddr, blockSize)
+		if err != nil {
+			return err
 		}
 	}
-	// return buf.Bytes(), nil
-	return nil, nil
+	return nil
 }
 
 // nodesFromFile open a local file and build dag nodes

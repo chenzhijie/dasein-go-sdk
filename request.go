@@ -8,6 +8,7 @@ import (
 	"github.com/daseinio/dasein-wallet-api/client"
 	"github.com/daseinio/dasein-wallet-api/core"
 	"github.com/ontio/ontology/common"
+	fs "github.com/ontio/ontology/smartcontract/service/native/ontfs"
 )
 
 const (
@@ -15,15 +16,8 @@ const (
 	DEFAULT_RPC_ADDR    = "http://localhost:20336"
 )
 
-type Setting struct {
-	fsGasPrice       uint64
-	GasPerKBPerBlock uint64
-	gasPerKBForRead  uint64
-	gasForChallenge  uint64
-}
-
 type ContractRequest struct {
-	setting *Setting
+	setting *fs.FsSetting
 	client  *client.DaseinClient
 }
 
@@ -42,16 +36,6 @@ func NewContractRequest(wallet, password, rpcSvrAddr string) *ContractRequest {
 	return &ContractRequest{
 		client: client,
 	}
-}
-
-type StoreFileInfo struct {
-	FileHashStr    string
-	BlockNum       uint64
-	BlockSize      uint64
-	ChallengeRate  uint64
-	ChallengeTimes uint64
-	CopyNum        uint64
-	FileProveParam []byte
 }
 
 func (cr *ContractRequest) GetNodeList(fileSize uint64, copyNum int32) ([]string, error) {
@@ -89,24 +73,12 @@ func (c *ContractRequest) GetFileProveParams(fileProveParam []byte) ([]byte, []b
 	return p.G, p.G0, p.PubKey, string(p.FileId), string(p.R), string(p.Paring), nil
 }
 
-func (cr *ContractRequest) PayStoreFile(info *StoreFileInfo, proveParams []byte) ([]byte, error) {
-	return cr.client.StoreFile(info.FileHashStr, info.BlockNum, info.BlockSize, info.ChallengeRate, info.ChallengeTimes, info.CopyNum, proveParams)
+func (cr *ContractRequest) PayStoreFile(fileHashStr string, blockNum, blockSize, challengeRate, challengeTimes, copyNum uint64, proveParams []byte) ([]byte, error) {
+	return cr.client.StoreFile(fileHashStr, blockNum, blockSize, challengeRate, challengeTimes, copyNum, proveParams)
 }
 
-func (cr *ContractRequest) GetFileInfo(fileHashStr string) (*StoreFileInfo, error) {
-	info, err := cr.client.GetFileInfo(fileHashStr)
-	if err != nil {
-		return nil, err
-	}
-	return &StoreFileInfo{
-		FileHashStr:    fileHashStr,
-		BlockNum:       info.FileBlockNum,
-		BlockSize:      info.FileBlockSize,
-		ChallengeRate:  info.ChallengeRate,
-		ChallengeTimes: info.ChallengeTimes,
-		CopyNum:        info.CopyNum,
-		FileProveParam: info.FileProveParam,
-	}, nil
+func (cr *ContractRequest) GetFileInfo(fileHashStr string) (*fs.FileInfo, error) {
+	return cr.client.GetFileInfo(fileHashStr)
 }
 
 func (cr *ContractRequest) IsFilePaid(fileHashStr string) (bool, error) {
@@ -151,44 +123,46 @@ func (cr *ContractRequest) GetStoreFileNodes(fileHashStr string) ([]*NodeInfo, e
 	return nodes, nil
 }
 
-func (cr *ContractRequest) CalculateReadFee(fileInfo *StoreFileInfo, fileHashStr string) (uint64, error) {
-	err := cr.updateSetting()
-	if err != nil {
-		log.Errorf("update setting failed")
-		return 0, err
+// PledgeForReadFile setup pledge for reading file
+// plans to download specific blockNum from a node with wallet address
+func (cr *ContractRequest) PledgeForReadFile(fileHashStr string, plans map[common.Address]uint64) ([]byte, error) {
+	records := make([]fs.Read, 0)
+	for address, blockNum := range plans {
+		records = append(records, fs.Read{
+			ReadAddr:        address,
+			MaxReadBlockNum: blockNum,
+		})
 	}
-
-	readMinFee := fileInfo.BlockNum * fileInfo.BlockSize * cr.setting.fsGasPrice * cr.setting.gasPerKBForRead
-	log.Debugf("num:%d, size:%d, gas:%d, read:%d\n", fileInfo.BlockNum, fileInfo.BlockSize, cr.setting.fsGasPrice, cr.setting.gasPerKBForRead)
-	return readMinFee, nil
-}
-
-func (cr *ContractRequest) PledgeForReadFile(fileHashStr string, nodeWalletAddr common.Address, fee uint64) ([]byte, error) {
-	log.Debugf("str:%v, addr:%v, fee:%d", fileHashStr, nodeWalletAddr, fee)
-	return cr.client.FsReadFilePledge(fileHashStr, nodeWalletAddr, fee)
-}
-
-func (cr *ContractRequest) GetReadFilePledge(fileHashStr string) error {
-	_, err := cr.client.FsGetFileReadPledge(fileHashStr)
-	if err != nil {
-		return err
+	readPlan := fs.ReadPlan{
+		NodeCount:   uint64(len(plans)),
+		NodeRecords: records,
 	}
-	return nil
+	log.Debugf("str:%v, readPlan:%v", fileHashStr, readPlan)
+	return cr.client.FsReadFilePledge(fileHashStr, readPlan)
 }
 
-func (cr *ContractRequest) GenFileReadSettleSlice(fileHashStr string, payTo common.Address, blockNum, blockSize uint64, sliceId uint64) ([]byte, error) {
+// IsReadFilePledgeExist check if the pledge has commited
+func (cr *ContractRequest) IsReadFilePledgeExist(fileHashStr string) bool {
+	fpledge, _, err := cr.client.FsGetFileReadPledge(fileHashStr)
+	if err != nil {
+		log.Debugf("get file read pledge failed:%s", err)
+	}
+	return fpledge != nil && err == nil
+}
+
+func (cr *ContractRequest) GenFileReadSettleSlice(fileHashStr string, payTo common.Address, sliceId uint64) ([]byte, error) {
 	if cr.setting == nil {
 		err := cr.updateSetting()
 		if err != nil {
 			return nil, err
 		}
 	}
-	slicePay := blockNum * blockSize * cr.setting.fsGasPrice * cr.setting.gasPerKBForRead
-	slice, err := cr.client.GenFileReadSettleSlice([]byte(fileHashStr), payTo, slicePay, sliceId)
+	// slicePay := blockNum * blockSize * cr.setting.fsGasPrice * cr.setting.gasPerKBForRead
+	slice, err := cr.client.GenFileReadSettleSlice([]byte(fileHashStr), payTo, sliceId)
 	if err != nil {
 		return nil, err
 	}
-	return cr.client.FileReadSettleSliceSer(slice.FileHash, slice.PayFrom, slice.PayTo, slice.SlicePay, slice.SliceId, slice.Sig, slice.PubKey)
+	return cr.client.FileReadSettleSliceEnc(slice.FileHash, slice.PayFrom, slice.PayTo, slice.SliceId, slice.Sig, slice.PubKey)
 }
 
 func (cr *ContractRequest) DeleteFile(fileHashStr string) error {
@@ -197,17 +171,11 @@ func (cr *ContractRequest) DeleteFile(fileHashStr string) error {
 
 func (cr *ContractRequest) updateSetting() error {
 	core := core.Init(cr.client.WalletPath, string(cr.client.Password), cr.client.OntRpcSrvAddr)
-	log.Debugf("pwd :%s", string(cr.client.Password))
 	fsSetting, err := core.FsGetSetting()
 	if err != nil {
 		log.Debugf("get setting error:%s", err)
 		return err
 	}
-	cr.setting = &Setting{
-		fsGasPrice:       fsSetting.FsGasPrice,
-		GasPerKBPerBlock: fsSetting.GasPerKBPerBlock,
-		gasPerKBForRead:  fsSetting.GasPerKBForRead,
-		gasForChallenge:  fsSetting.GasForChallenge,
-	}
+	cr.setting = fsSetting
 	return nil
 }

@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	STORE_FILES_DIR    = "./stores/"    // temp directory, using for keep sending files infomation
-	DOWNLOAD_FILES_DIR = "./downloads/" // downloads file directory, using for store downloaded files
+	STORE_FILES_DIR    = "./stores/"      // temp directory, using for keep sending files infomation
+	DOWNLOAD_FILES_DIR = "./downloading/" // downloads file directory, using for store downloaded files
 )
 
 type FileMgr struct {
@@ -22,7 +22,7 @@ type FileMgr struct {
 // NewFileMgr init a new file manager
 func NewFileMgr() *FileMgr {
 	fm := &FileMgr{}
-	fm.fileSliceId = make(map[string]uint64, 0)
+	fm.readFileInfos = make(map[string]*fmFileInfo, 0)
 	fm.fileInfos = make(map[string]*fmFileInfo, 0)
 	return fm
 }
@@ -31,9 +31,11 @@ func NewFileMgr() *FileMgr {
 // including block hash string, a timestamp of sending this block to remote peer
 // a timestamp of receiving a block from remote peer
 type fmBlockInfo struct {
-	Hash          string `json:"hash"`
-	SendTimestamp int64  `json:"sendts"`
-	RecvTimestamp int64  `json:"recvts"`
+	Hash           string   `json:"hash"`
+	SendTimestamp  int64    `json:"sendts"`
+	RecvTimestamp  int64    `json:"recvts"`
+	NodeWalletAddr string   `json:"node_wallet_address"`
+	ChildHashStrs  []string `json:"childs"`
 }
 
 // NewFmBlockInfo new file manager block info
@@ -74,14 +76,14 @@ func (sfm *StoreFileMgr) NewStoreFile(hashStr string, provePrivKey []byte) error
 		}
 	}
 
-	data, _ := ioutil.ReadFile(sfm.storeFilePath(hashStr))
+	data, _ := ioutil.ReadFile(storeFilePath(hashStr))
 	if len(data) == 0 {
 		sfm.fileInfos[hashStr] = NewFmFileInfo(provePrivKey)
 		buf, err := json.Marshal(sfm.fileInfos[hashStr])
 		if err != nil {
 			return err
 		}
-		return ioutil.WriteFile(sfm.storeFilePath(hashStr), buf, 0666)
+		return ioutil.WriteFile(storeFilePath(hashStr), buf, 0666)
 	}
 
 	fi := &fmFileInfo{}
@@ -97,7 +99,7 @@ func (sfm *StoreFileMgr) DelStoreFileInfo(hashStr string) error {
 	sfm.lock.Lock()
 	defer sfm.lock.Unlock()
 	delete(sfm.fileInfos, hashStr)
-	return os.Remove(sfm.storeFilePath(hashStr))
+	return os.Remove(storeFilePath(hashStr))
 }
 
 // AddStoredBlock add a new stored block info to map and local storage
@@ -124,7 +126,7 @@ func (sfm *StoreFileMgr) AddStoredBlock(hashStr, blockHash string) error {
 		fi.Blocks = oldBlks
 		return err
 	}
-	return ioutil.WriteFile(sfm.storeFilePath(hashStr), buf, 0666)
+	return ioutil.WriteFile(storeFilePath(hashStr), buf, 0666)
 }
 
 // IsBlockStored check if block has stored
@@ -170,26 +172,109 @@ func (sfm *StoreFileMgr) OnSendAllBlocks(hashStr string) {
 	delete(sfm.fileInfos, hashStr)
 }
 
-func (sfm *StoreFileMgr) storeFilePath(hashStr string) string {
+type ReadFileMgr struct {
+	readFileInfos map[string]*fmFileInfo
+	lock          sync.RWMutex
+}
+
+func (rfm *ReadFileMgr) NewReadFile(fileHashStr string) error {
+	rfm.lock.Lock()
+	defer rfm.lock.Unlock()
+	if _, err := os.Stat(DOWNLOAD_FILES_DIR); os.IsNotExist(err) {
+		err = os.MkdirAll(DOWNLOAD_FILES_DIR, 0755)
+		if err != nil {
+			return err
+		}
+	}
+
+	data, _ := ioutil.ReadFile(downloadingFilePath(fileHashStr))
+	if len(data) == 0 {
+		rfm.readFileInfos[fileHashStr] = NewFmFileInfo([]byte{})
+		return nil
+	}
+
+	fi := &fmFileInfo{}
+	err := json.Unmarshal(data, fi)
+	if err != nil {
+		return err
+	}
+	rfm.readFileInfos[fileHashStr] = fi
+	return nil
+}
+
+func (rfm *ReadFileMgr) GetReadNodeSliceId(fileHashStr, nodeWalletAddr string) int {
+	rfm.lock.RLock()
+	defer rfm.lock.RUnlock()
+	info := rfm.readFileInfos[fileHashStr]
+	cnt := 0
+	for _, b := range info.Blocks {
+		if b.NodeWalletAddr == nodeWalletAddr {
+			cnt++
+		}
+	}
+	return cnt
+}
+
+func (rfm *ReadFileMgr) IsBlockRead(fileHashStr, nodeWalletAddr, blockHashStr string) bool {
+	rfm.lock.RLock()
+	defer rfm.lock.RUnlock()
+	info := rfm.readFileInfos[fileHashStr]
+	if info == nil {
+		return false
+	}
+	for _, b := range info.Blocks {
+		if b.Hash == blockHashStr && b.NodeWalletAddr == nodeWalletAddr {
+			return true
+		}
+	}
+	return false
+}
+
+func (rfm *ReadFileMgr) GetBlockChilds(fileHashStr, nodeWalletAddr, blockHashStr string) []string {
+	rfm.lock.RLock()
+	defer rfm.lock.RUnlock()
+	info := rfm.readFileInfos[fileHashStr]
+	for _, b := range info.Blocks {
+		if b.Hash == blockHashStr && b.NodeWalletAddr == nodeWalletAddr {
+			return b.ChildHashStrs
+		}
+	}
+	return nil
+}
+
+func (rfm *ReadFileMgr) ReceivedBlockFromNode(fileHashStr, blockHashStr, nodeWalletAddr string, childs []string) {
+	rfm.lock.Lock()
+	defer rfm.lock.Unlock()
+
+	info := rfm.readFileInfos[fileHashStr]
+	if info == nil {
+		info = NewFmFileInfo([]byte{})
+		info.Blocks = make([]*fmBlockInfo, 0)
+	}
+	info.Blocks = append(info.Blocks, &fmBlockInfo{
+		Hash:           blockHashStr,
+		RecvTimestamp:  time.Now().Unix(),
+		NodeWalletAddr: nodeWalletAddr,
+		ChildHashStrs:  childs,
+	})
+	buf, err := json.Marshal(info)
+	if err != nil {
+		return
+	}
+	ioutil.WriteFile(downloadingFilePath(fileHashStr), buf, 0666)
+}
+
+func (rfm *ReadFileMgr) RemoveReadFile(fileHashStr string) {
+	rfm.lock.Lock()
+	defer rfm.lock.Unlock()
+	delete(rfm.readFileInfos, fileHashStr)
+	os.Remove(downloadingFilePath(fileHashStr))
+}
+
+func storeFilePath(hashStr string) string {
 	return STORE_FILES_DIR + hashStr
 }
 
-type ReadFileMgr struct {
-	fileSliceId map[string]uint64
-	lock        sync.RWMutex
-}
-
-func (rfm *ReadFileMgr) IncreAndGetSliceId(fileHashStr string) uint64 {
-	rfm.lock.Lock()
-	defer rfm.lock.Unlock()
-	id := rfm.fileSliceId[fileHashStr]
-	id++
-	rfm.fileSliceId[fileHashStr] = id
-	return id
-}
-
-func (rfm *ReadFileMgr) RemoveSliceId(fileHashStr string) {
-	rfm.lock.Lock()
-	defer rfm.lock.Unlock()
-	delete(rfm.fileSliceId, fileHashStr)
+func downloadingFilePath(hashStr string) string {
+	return DOWNLOAD_FILES_DIR + hashStr
 }

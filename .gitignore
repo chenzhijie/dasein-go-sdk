@@ -3,3 +3,5 @@ wallet.dat
 test/wallet.dat
 test/smallfile
 test/bigfile
+test/stores/*
+test/downloading/*

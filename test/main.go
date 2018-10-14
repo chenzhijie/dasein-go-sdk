@@ -81,7 +81,7 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	start := 1510000
+	start := 1810000
 	for i := start; i < start+50000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
@@ -120,7 +120,7 @@ func testGetData(fileHashStr string) {
 
 	log.Info("-----------------------")
 	log.Info("Single Block Test")
-	_, err = client.GetData(fileHashStr, chosenNode.WalletAddr)
+	err = client.GetData(fileHashStr, chosenNode.WalletAddr)
 	if err != nil {
 		log.Error(err)
 		return
