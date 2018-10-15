@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -33,10 +34,32 @@ func testSendFile(fileName string, rate, times uint64, copyNum int32) {
 		log.Error(err)
 		return
 	}
-	err = client.SendFile(fileName, rate, times, copyNum, encrypt, encryptPassword)
+	fileHashStr, err := client.SendFile(fileName, rate, times, copyNum, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
 		return
+	}
+
+	// check prove
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	retry := 0
+	for {
+		if retry > sdk.MAX_RETRY_REQUEST_TIMES {
+			log.Error("check prove file failed timeout")
+			return
+		}
+
+		nodes, _ := r.GetStoreFileNodes(fileHashStr)
+		if len(nodes) > 0 {
+			log.Info("remote nodes have stored file!")
+			err = sdk.DelStoreFileInfo(fileHashStr)
+			if err != nil {
+				log.Error(err)
+			}
+			break
+		}
+		retry++
+		time.Sleep(time.Duration(sdk.MAX_REQUEST_TIMEWAIT) * time.Second)
 	}
 }
 
@@ -54,7 +77,7 @@ func testSendSmallFile() {
 	}
 	defer smallF.Close()
 	smallF.WriteString("aa123123456s \n")
-	err = client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
+	fileHashStr, err := client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
 		return
@@ -63,6 +86,27 @@ func testSendSmallFile() {
 	if err != nil {
 		log.Error(err)
 		return
+	}
+
+	// check prove
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	retry := 0
+	for {
+		if retry > sdk.MAX_RETRY_REQUEST_TIMES {
+			log.Error("check prove file failed timeout")
+			return
+		}
+		nodes, _ := r.GetStoreFileNodes(fileHashStr)
+		if len(nodes) > 0 {
+			log.Info("remote nodes have stored file!")
+			err = sdk.DelStoreFileInfo(fileHashStr)
+			if err != nil {
+				log.Error(err)
+			}
+			break
+		}
+		retry++
+		time.Sleep(time.Duration(sdk.MAX_REQUEST_TIMEWAIT) * time.Second)
 	}
 
 }
@@ -81,12 +125,12 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	start := 1810000
+	start := 250000
 	for i := start; i < start+50000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
 	log.Debugf("send big file")
-	err = client.SendFile(bigFile, 200, 3, 0, encrypt, encryptPassword)
+	fileHashStr, err := client.SendFile(bigFile, 200, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Errorf("send file err:%s", err)
 		return
@@ -96,21 +140,47 @@ func testSendBigFile() {
 		log.Error(err)
 		return
 	}
+
+	// check prove
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	retry := 0
+	for {
+		if retry > sdk.MAX_RETRY_REQUEST_TIMES {
+			log.Error("check prove file failed timeout")
+			return
+		}
+		nodes, _ := r.GetStoreFileNodes(fileHashStr)
+		if len(nodes) > 0 {
+			log.Info("remote nodes have stored file!")
+			err = sdk.DelStoreFileInfo(fileHashStr)
+			if err != nil {
+				log.Error(err)
+			}
+			break
+		}
+		retry++
+		time.Sleep(time.Duration(sdk.MAX_REQUEST_TIMEWAIT) * time.Second)
+	}
 }
 
 func testGetData(fileHashStr string) {
 	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
-	nodes, err := r.GetStoreFileNodes(fileHashStr)
-	if err != nil {
-		log.Error(err)
-		return
+	chosenNode := sdk.GetReadFileNodeInfo(fileHashStr)
+	log.Debugf("local chosen node:%v", chosenNode)
+	if chosenNode == nil {
+		nodes, err := r.GetStoreFileNodes(fileHashStr)
+		if err != nil {
+			log.Error(err)
+			return
+		}
+		if len(nodes) == 0 {
+			log.Errorf("no nodes for:%s", fileHashStr)
+			return
+		}
+		randIndx := rand.Intn(len(nodes))
+		chosenNode = nodes[randIndx]
 	}
-	if len(nodes) == 0 {
-		log.Errorf("no nodes for:%s", fileHashStr)
-		return
-	}
-	randIndx := rand.Intn(len(nodes))
-	chosenNode := nodes[randIndx]
+
 	log.Infof("get data from :%s", chosenNode.Addr)
 	client, err := sdk.NewClient(chosenNode.Addr, wallet, walletPwd, rpc)
 	if err != nil {
@@ -118,9 +188,7 @@ func testGetData(fileHashStr string) {
 		return
 	}
 
-	log.Info("-----------------------")
-	log.Info("Single Block Test")
-	err = client.GetData(fileHashStr, chosenNode.WalletAddr)
+	err = client.GetData(fileHashStr, chosenNode.Addr, chosenNode.WalletAddr)
 	if err != nil {
 		log.Error(err)
 		return
@@ -129,49 +197,6 @@ func testGetData(fileHashStr string) {
 	if encrypt {
 		crypto.AESDecryptFile(fileHashStr, encryptPassword, fmt.Sprintf("%s-decrypted", fileHashStr))
 	}
-	log.Info("-----------------------")
-	// log.Info("Multi Block Test")
-	// data, err = client.GetData(bigTxt)
-	// if err != nil {
-	// 	log.Error(err)
-	// }
-
-	// file, err = os.Create("big")
-	// if err != nil {
-	// 	log.Error(err)
-	// }
-	// _, err = file.Write(data)
-	// if err != nil {
-	// 	log.Error(err)
-	// }
-	// file.Close()
-
-	// log.Info("-----------------------")
-	// log.Info("Delete Block Test")
-	// err = client.DelData(deleteTxt)
-	// if err != nil {
-	// 	log.Error(err)
-	// } else {
-	// 	log.Infof("DelData %s success", deleteTxt)
-	// }
-
-	/*
-		log.Info("Multi Block Test")
-		data, err = client.GetData(largeTxt)
-		if err != nil {
-			log.Error(err)
-		}
-
-		file, err = os.Create("large")
-		if err != nil {
-			log.Error(err)
-		}
-		_, err = file.Write(data)
-		if err != nil {
-			log.Error(err)
-		}
-		file.Close()
-	*/
 }
 
 func testDelData(fileHashStr string) {
@@ -261,23 +286,22 @@ func testByFlags() {
 
 func testGetInfo() {
 	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
-	fileHashStr := "Qmb7Yrt5F3TN7GnsKWtqz9yK99HEd7Y4hh3FVe3L6VTFm6"
+	fileHashStr := "QmULD2uL21CiH4UdPM6TiXZs2qGiMY5BG2j3ZXTko7FPYJ"
 	info, _ := r.GetFileInfo(fileHashStr)
-	_, _, _, _, _, p, _ := r.GetFileProveParams(info.FileProveParam)
-	fmt.Printf("paring:%s\n", p)
+	G, G0, PubKey, FileId, R, Paring, _ := r.GetFileProveParams(info.FileProveParam)
+	fmt.Printf("G:\n%v\nG0:\n%v\nPubKey:\n%v\nFileId:\n%v\nR:\n%v\nParing:\n%v\n\n", hex.EncodeToString(G), hex.EncodeToString(G0), hex.EncodeToString(PubKey), FileId, R, Paring)
 }
 
 func main() {
 	logging.SetLogLevel("test", "DEBUG")
 	logging.SetLogLevel("daseingosdk", "DEBUG")
 	logging.SetLogLevel("bitswap", "DEBUG")
-
 	testByFlags()
 	// testGetInfo()
 	// testDelFileAndGet()
 	// testSendSmallFile()
 	// testGetData("QmafaFyC4DkLcaPTbhBrBxfUWB3BVWNeAnekzzYhgtkztD")
-	// testDelData()·
+	// testDelData()
 	// testSendBigFile()
 	// testSendSmallFile()
 	// testGetNodeList()

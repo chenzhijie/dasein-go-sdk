@@ -68,9 +68,39 @@ func NewClient(server, wallet, password, rpc string) (*Client, error) {
 	return client, err
 }
 
+// DelStoreFileInfo delete store file
+func DelStoreFileInfo(fileHashStr string) error {
+	fm := NewFileMgr()
+	return fm.DelStoreFileInfo(fileHashStr)
+}
+
+// GetReadFileNodeInfo get have read node infomation
+func GetReadFileNodeInfo(fileHashStr string) *NodeInfo {
+	fm := NewFileMgr()
+	err := fm.NewReadFile(fileHashStr)
+	if err != nil {
+		return nil
+	}
+	addr, walletAddr := fm.GetReadFileNodeInfo(fileHashStr)
+	if len(addr) == 0 || len(walletAddr) == 0 {
+		return nil
+	}
+	walletAddress, err := common.AddressFromBase58(walletAddr)
+	if err != nil {
+		log.Errorf("parse base58 address failed:%s", walletAddr)
+		return nil
+	}
+
+	n := &NodeInfo{
+		Addr:       addr,
+		WalletAddr: walletAddress,
+	}
+	return n
+}
+
 // GetData get a block from a specific remote node
 // If the block is a root dag node, this function will get all blocks recursively
-func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) error {
+func (c *Client) GetData(cidString, nodeAddr string, nodeWalletAddr common.Address) error {
 	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
 	if request == nil {
 		return errors.New("init contract requester fail in GetData")
@@ -113,7 +143,7 @@ func (c *Client) GetData(cidString string, nodeWalletAddr common.Address) error 
 		return err
 	}
 
-	err = c.decodeBlock(CID, c.peer.ID(), cidString, request, nodeWalletAddr, fileInfo.FileBlockSize)
+	err = c.decodeBlock(CID, c.peer.ID(), nodeAddr, nodeWalletAddr, cidString, request, fileInfo.FileBlockSize)
 	if err != nil {
 		return err
 	}
@@ -131,58 +161,58 @@ func (c *Client) DelData(cidString string) error {
 	return c.node.Exchange.DelBlock(context.Background(), c.peer.ID(), CID)
 }
 
-func DelStoreFileInfo(fileHashStr string) error {
-	fm := NewFileMgr()
-	return fm.DelStoreFileInfo(fileHashStr)
-}
-
 // SendFile send a file to node with copy number
-func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes uint64, copyNum int32, encrypt bool, encryptPassword string) error {
+func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes uint64, copyNum int32, encrypt bool, encryptPassword string) (string, error) {
 	if challengeRate < MIN_CHALLENGE_RATE {
-		return fmt.Errorf("challenge rate must more than %d", MIN_CHALLENGE_RATE)
+		return "", fmt.Errorf("challenge rate must more than %d", MIN_CHALLENGE_RATE)
 	}
 	if challengeTimes < MIN_CHALLENGE_TIMES {
-		return fmt.Errorf("challenge times must more than %d", MIN_CHALLENGE_TIMES)
+		return "", fmt.Errorf("challenge times must more than %d", MIN_CHALLENGE_TIMES)
 	}
 	if copyNum <= 0 {
 		copyNum = 0
 	}
 	if encrypt && len(encryptPassword) == 0 {
-		return fmt.Errorf("encrypt password is missing")
+		return "", fmt.Errorf("encrypt password is missing")
 	}
 	fileStat, err := os.Stat(fileName)
 	if err != nil {
-		return err
+		return "", err
 	}
 	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
 	if request == nil {
-		return errors.New("init contract requester failed in SendFile")
+		return "", errors.New("init contract requester failed in SendFile")
 
-	}
-
-	// get nodeList
-	nodeList, err := request.GetNodeList(uint64(fileStat.Size()), copyNum)
-	if err != nil {
-		return err
 	}
 
 	// split file to blocks
 	root, list, err := nodesFromFile(fileName, encrypt, encryptPassword)
 	if err != nil {
-		return err
+		return "", err
 	}
 	fileHashStr := root.Cid().String()
 	log.Debugf("root:%s, list.len:%d", fileHashStr, len(list))
+
 	paramsBuf, privKey, err := c.payForSendFile(fileName, root, challengeRate, challengeTimes, uint64(copyNum), uint64(len(list)+1))
 	if err != nil {
-		return err
+		return "", err
 	}
 	if len(paramsBuf) == 0 || len(privKey) == 0 {
-		return fmt.Errorf("params.length is %d, prove private key length is %d", len(paramsBuf), len(privKey))
+		return "", fmt.Errorf("params.length is %d, prove private key length is %d", len(paramsBuf), len(privKey))
 	}
 	_, g0, _, fileID, r, pairing, err := request.GetFileProveParams(paramsBuf)
 	if err != nil {
-		return err
+		return "", err
+	}
+
+	// get nodeList
+	nodeList := c.fm.GetStoredBlockNodeList(fileHashStr, fileHashStr)
+	log.Debugf("stored nodelist:%v", nodeList)
+	if len(nodeList) == 0 {
+		nodeList, err = request.GetNodeList(uint64(fileStat.Size()), copyNum)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	var server string
@@ -203,7 +233,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 		break
 	}
 	if len(server) == 0 {
-		return fmt.Errorf("no online nodes from nodeList")
+		return "", fmt.Errorf("no online nodes from nodeList")
 	}
 	log.Debugf("nodelist:%v, store to :%s", nodeList, server)
 
@@ -217,7 +247,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 	err = c.preSendFile(root, list, copyNum, nodeList)
 	if err != nil {
 		log.Errorf("presend file failed :%s", err)
-		return err
+		return "", err
 	}
 	// index of root tag start from 1
 	log.Debugf("r:\n%s\npairing:\n%s", r, pairing)
@@ -225,7 +255,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 	log.Debugf("r:%s, pari:%s, privKey:%v, index:%s", r, pairing, privKey, 1)
 	if err != nil {
 		log.Errorf("generate root tag failed:%s", err)
-		return err
+		return "", err
 	}
 
 	// send root node
@@ -233,11 +263,11 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 		ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), []blocks.Block{root}, []int32{0}, [][]byte{tag}, copyNum, nodeList)
 		log.Infof("add root file to:%s ret:%v, err:%s", c.peer.ID(), ret, err)
 		if err != nil {
-			return err
+			return "", err
 		}
-		err = c.fm.AddStoredBlock(fileHashStr, root.Cid().String())
+		err = c.fm.AddStoredBlock(fileHashStr, root.Cid().String(), server, nodeList)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if copyNum > 0 {
 			log.Infof("send %s success, result:%v", root.Cid(), ret)
@@ -274,7 +304,7 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 		log.Debugf("r:%s, pari:%s, privKey:%v, index:%d", r, pairing, privKey, index+1)
 		if err != nil {
 			log.Errorf("generate %d tag failed:%s", index+1, err)
-			return err
+			return "", err
 		}
 		otherTags = append(otherTags, tag)
 		log.Debugf("index:%v tag:%v, hash:%s", otherIndxs, tag, dagNode.Cid().String())
@@ -282,12 +312,12 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 		if len(otherBlks) >= blockSizePerMsg || i == len(list)-1 {
 			ret, err := c.node.Exchange.AddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), otherBlks, otherIndxs, otherTags, copyNum, nodeList)
 			if err != nil {
-				return err
+				return "", err
 			}
 			for _, sent := range otherBlks {
-				err = c.fm.AddStoredBlock(fileHashStr, sent.Cid().String())
+				err = c.fm.AddStoredBlock(fileHashStr, sent.Cid().String(), server, nodeList)
 				if err != nil {
-					return err
+					return "", err
 				}
 				if copyNum > 0 {
 					log.Debugf("send %s success, size:%d, result:%v", sent.Cid(), len(sent.RawData()), ret)
@@ -303,10 +333,10 @@ func (c *Client) SendFile(fileName string, challengeRate uint64, challengeTimes 
 
 	}
 	log.Infof("File have stored: %s", root.Cid().String())
-	return nil
+	return root.Cid().String(), nil
 }
 
-// PayForSendFile pay before send a file
+// payForSendFile pay before send a file
 // return PoR params byte slice, PoR private key of the file or error
 func (c *Client) payForSendFile(fileName string, root ipld.Node, challengeRate, challengeTimes, copyNum, blockNum uint64) ([]byte, []byte, error) {
 	fileHashStr := root.Cid().String()
@@ -386,7 +416,7 @@ func (c *Client) preSendFile(root ipld.Node, list []*helpers.UnixfsNode, copyNum
 	return c.node.Exchange.PreAddBlocks(context.Background(), c.peer.ID(), root.Cid().String(), cids, copyNum, nodeList)
 }
 
-func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID, fileHashStr string, request *ContractRequest, nodeWalletAddr common.Address, blockSize uint64) error {
+func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID, nodeAddr string, nodeWalletAddr common.Address, fileHashStr string, request *ContractRequest, blockSize uint64) error {
 	hasRead := c.fm.IsBlockRead(fileHashStr, nodeWalletAddr.ToBase58(), CID.String())
 	log.Debugf("has read:%s %t", CID.String(), hasRead)
 	childs := make([]string, 0)
@@ -418,7 +448,7 @@ func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID, fileHashStr string, r
 		for _, l := range dagNode.Links() {
 			childs = append(childs, l.Cid.String())
 		}
-		c.fm.ReceivedBlockFromNode(fileHashStr, CID.String(), nodeWalletAddr.ToBase58(), childs)
+		c.fm.ReceivedBlockFromNode(fileHashStr, CID.String(), nodeAddr, nodeWalletAddr.ToBase58(), childs)
 		if linksNum == 0 {
 			pb := new(ftpb.Data)
 			if err := proto.Unmarshal(dagNode.(*ml.ProtoNode).Data(), pb); err != nil {
@@ -438,7 +468,7 @@ func (c *Client) decodeBlock(CID *cid.Cid, peerId peer.ID, fileHashStr string, r
 		if err != nil {
 			return err
 		}
-		err = c.decodeBlock(childCid, peerId, fileHashStr, request, nodeWalletAddr, blockSize)
+		err = c.decodeBlock(childCid, peerId, nodeAddr, nodeWalletAddr, fileHashStr, request, blockSize)
 		if err != nil {
 			return err
 		}
