@@ -35,11 +35,12 @@ import (
 var log = logging.Logger("daseingosdk")
 
 const (
-	MAX_ADD_BLOCKS_SIZE     = 10 // max add blocks size by sending msg
-	MAX_RETRY_REQUEST_TIMES = 6  // max request retry times
-	MAX_REQUEST_TIMEWAIT    = 10 // request time wait in second
-	MIN_CHALLENGE_RATE      = 10 // min challenge blocks count <==> rate
-	MIN_CHALLENGE_TIMES     = 2  // min challenge times
+	MAX_ADD_BLOCKS_SIZE     = 10     // max add blocks size by sending msg
+	MAX_RETRY_REQUEST_TIMES = 6      // max request retry times
+	MAX_REQUEST_TIMEWAIT    = 10     // request time wait in second
+	MIN_CHALLENGE_RATE      = 10     // min challenge blocks count <==> rate
+	MIN_CHALLENGE_TIMES     = 2      // min challenge times
+	CHUNK_SIZE              = 262144 //chunk size
 )
 
 type Client struct {
@@ -357,17 +358,12 @@ func (c *Client) payForSendFile(fileName string, root ipld.Node, challengeRate, 
 	fileHashStr := root.Cid().String()
 	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
 	fileInfo, _ := request.GetFileInfo(fileHashStr)
-
 	var paramsBuf, privateKey []byte
 	if fileInfo == nil {
-		blockSize, err := root.Size()
-		if err != nil || blockSize == 0 {
-			return nil, nil, err
-		}
-
-		blockSizeInKB := uint64(math.Ceil(float64(blockSize) / 1024.0))
-		log.Debugf("pay blocksize:%d, inkb:%d, blockNum:%d", blockSize, blockSizeInKB, blockNum)
+		blockSizeInKB := uint64(math.Ceil(float64(CHUNK_SIZE) / 1024.0))
+		log.Debugf("pay blockNum:%d", blockNum)
 		g, g0, pubKey, privKey, fileID, r, pairing := PoR.Init(fileName)
+		var err error
 		paramsBuf, err = request.ProveParamSer(g, g0, pubKey, []byte(fileID), r, pairing)
 		privateKey = privKey
 		if err != nil {

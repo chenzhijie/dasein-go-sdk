@@ -108,9 +108,6 @@ func (cr *ContractRequest) GetStoreFileNodes(fileHashStr string) ([]*NodeInfo, e
 		return nil, errors.New("get details failed, details is nil")
 	}
 	log.Debugf("get details:%d ,copynum:%d,err:%s\n", details.ProveDetailNum, details.CopyNum, err)
-	if details.ProveDetailNum == details.CopyNum+1 {
-		return nil, errors.New("all node has finishing prove")
-	}
 	fileInfo, err := cr.client.GetFileInfo(fileHashStr)
 	if err != nil {
 		return nil, err

@@ -76,7 +76,7 @@ func testSendSmallFile() {
 		return
 	}
 	defer smallF.Close()
-	smallF.WriteString("aa123123456s \n")
+	smallF.WriteString("aa12asdjsajdi3123456s \n")
 	fileHashStr, err := client.SendFile(smallFile, 1000, 3, 0, encrypt, encryptPassword)
 	if err != nil {
 		log.Error(err)
@@ -125,7 +125,7 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	start := 300000
+	start := 600000
 	for i := start; i < start+50000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
@@ -257,20 +257,35 @@ func testDelData(fileHashStr string) {
 	log.Infof("delete file sucess:%s", fileHashStr)
 }
 
+func testFileExist(fileHashStr string) {
+	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	info, _ := r.GetFileInfo(fileHashStr)
+	if info != nil {
+		log.Info("true")
+	} else {
+		log.Info("false")
+	}
+}
+
 func testByFlags() {
+	// config options
+	wPwd := flag.String("walletpwd", "pwd", "Wallet password")
+	walletPath := flag.String("wallet", "./wallet.dat", "Wallet path")
+	rpcAddr := flag.String("rpc", "http://127.0.0.1:20336", "Rpc address")
+
+	// send file options
 	isEncrypt := flag.Bool("encrypt", false, "Encrypt file")
 	ePwd := flag.String("encryptpwd", "", "Encrypt password")
-	wPwd := flag.String("walletpwd", "pwd", "Wallet password")
-	rates := flag.Int("challengerate", 10, "block count of challenge")
-	times := flag.Int("challengetimes", 3, "challenge time")
-	copynum := flag.Int("copynum", 0, "backup nodes number for copy")
+	rates := flag.Int("challengerate", 10, "Block count of challenge")
+	times := flag.Int("challengetimes", 3, "Challenge time")
+	copynum := flag.Int("copynum", 0, "Backup nodes number for copy")
 
 	if len(os.Args) < 2 {
 		return
 	}
 	operation := os.Args[1]
 	var fileName string
-	if operation == "send" || operation == "get" || operation == "del" {
+	if operation == "send" || operation == "get" || operation == "del" || operation == "exist" {
 		if len(os.Args) < 3 {
 			return
 		}
@@ -291,6 +306,8 @@ func testByFlags() {
 	}
 	walletPwd = *wPwd
 	encrypt = *isEncrypt
+	wallet = *walletPath
+	rpc = *rpcAddr
 	switch operation {
 	case "send":
 		testSendFile(fileName, uint64(*rates), uint64(*times), int32(*copynum))
@@ -300,6 +317,8 @@ func testByFlags() {
 		testDelData(fileName)
 	case "cancel":
 		testGetCancelData(fileName)
+	case "exist":
+		testFileExist(fileName)
 	case "testsendsmall":
 		testSendSmallFile()
 	case "testsendbig":
