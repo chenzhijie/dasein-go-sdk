@@ -104,21 +104,27 @@ func (cr *ContractRequest) GetStoreFileNodes(fileHashStr string) ([]*NodeInfo, e
 	if err != nil {
 		return nil, err
 	}
+	if details == nil {
+		return nil, errors.New("get details failed, details is nil")
+	}
+	log.Debugf("get details:%d ,copynum:%d,err:%s\n", details.ProveDetailNum, details.CopyNum, err)
+	if details.ProveDetailNum == details.CopyNum+1 {
+		return nil, errors.New("all node has finishing prove")
+	}
+	fileInfo, err := cr.client.GetFileInfo(fileHashStr)
+	if err != nil {
+		return nil, err
+	}
 	nodes := make([]*NodeInfo, 0)
-	if details != nil {
-		log.Debugf("get details:%d err:%s\n", details.ProveDetailNum, err)
-		for _, d := range details.ProveDetails {
-			log.Debugf("addr:%s, time:%d", string(d.NodeAddr), d.ProveTimes)
-			if len(d.NodeAddr) > 0 && d.ProveTimes > 0 {
-				nInfo := &NodeInfo{
-					Addr:       string(d.NodeAddr),
-					WalletAddr: d.WalletAddr,
-				}
-				nodes = append(nodes, nInfo)
+	for _, d := range details.ProveDetails {
+		log.Debugf("addr:%s, time:%d", string(d.NodeAddr), d.ProveTimes)
+		if len(d.NodeAddr) > 0 && d.ProveTimes > 0 && d.ProveTimes < fileInfo.ChallengeTimes {
+			nInfo := &NodeInfo{
+				Addr:       string(d.NodeAddr),
+				WalletAddr: d.WalletAddr,
 			}
+			nodes = append(nodes, nInfo)
 		}
-	} else {
-		log.Debugf("get details failed, details is nil")
 	}
 	return nodes, nil
 }
@@ -167,6 +173,10 @@ func (cr *ContractRequest) GenFileReadSettleSlice(fileHashStr string, payTo comm
 
 func (cr *ContractRequest) DeleteFile(fileHashStr string) error {
 	return cr.client.DeleteFile(fileHashStr)
+}
+
+func (cr *ContractRequest) CancelReadPledge(fileHashStr string) error {
+	return cr.client.FsCancelFileRead(fileHashStr)
 }
 
 func (cr *ContractRequest) updateSetting() error {

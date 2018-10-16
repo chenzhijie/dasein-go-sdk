@@ -133,7 +133,6 @@ func (c *Client) GetData(cidString, nodeAddr string, nodeWalletAddr common.Addre
 		}
 	}
 	log.Debug("has paid read pledge")
-
 	err = c.fm.NewReadFile(cidString)
 	if err != nil {
 		return err
@@ -149,6 +148,22 @@ func (c *Client) GetData(cidString, nodeAddr string, nodeWalletAddr common.Addre
 	}
 	c.fm.RemoveReadFile(cidString)
 	return err
+}
+
+// CancelGetData user want to cancel read file
+// Should wait after expired block height
+func (c *Client) CancelGetData(cidString string) error {
+	request := NewContractRequest(c.wallet, c.walletPwd, c.rpc)
+	if request == nil {
+		return errors.New("init contract requester fail in GetData")
+	}
+	err := request.CancelReadPledge(cidString)
+	log.Debugf("cancel err %s", err)
+	if err != nil {
+		return err
+	}
+	c.fm.RemoveReadFile(cidString)
+	return nil
 }
 
 // DelData delete a block of all remote nodes which keep the block

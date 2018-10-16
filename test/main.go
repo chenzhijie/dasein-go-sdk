@@ -125,7 +125,7 @@ func testSendBigFile() {
 	}
 	defer bigF.Close()
 
-	start := 250000
+	start := 300000
 	for i := start; i < start+50000; i++ {
 		bigF.WriteString(fmt.Sprintf("%d\n", i))
 	}
@@ -199,6 +199,21 @@ func testGetData(fileHashStr string) {
 	}
 }
 
+func testGetCancelData(fileHashStr string) {
+	client, err := sdk.NewClient("", wallet, walletPwd, rpc)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	err = client.CancelGetData(fileHashStr)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Infof("cancel get: %s success", fileHashStr)
+}
+
 func testDelData(fileHashStr string) {
 	r := sdk.NewContractRequest(wallet, walletPwd, rpc)
 	nodes, _ := r.GetStoreFileNodes(fileHashStr)
@@ -261,6 +276,12 @@ func testByFlags() {
 		}
 		fileName = os.Args[2]
 		flag.CommandLine.Parse(os.Args[3:])
+	} else if operation == "cancel" {
+		if len(os.Args) < 4 || os.Args[2] != "get" {
+			return
+		}
+		fileName = os.Args[3]
+		flag.CommandLine.Parse(os.Args[4:])
 	} else {
 		flag.CommandLine.Parse(os.Args[2:])
 	}
@@ -277,6 +298,8 @@ func testByFlags() {
 		testGetData(fileName)
 	case "del":
 		testDelData(fileName)
+	case "cancel":
+		testGetCancelData(fileName)
 	case "testsendsmall":
 		testSendSmallFile()
 	case "testsendbig":
@@ -296,6 +319,12 @@ func main() {
 	logging.SetLogLevel("test", "DEBUG")
 	logging.SetLogLevel("daseingosdk", "DEBUG")
 	logging.SetLogLevel("bitswap", "DEBUG")
+	// r := sdk.NewContractRequest(wallet, walletPwd, rpc)
+	// // err := r.CancelReadPledge("Qmefb6B6YoUwsgxKXqLpNLsv3QbAhm4FigGMFG9RkjPwWt")
+	// // fmt.Printf("cancel err:%s\n", err)
+	// is := r.IsReadFilePledgeExist("Qmefb6B6YoUwsgxKXqLpNLsv3QbAhm4FigGMFG9RkjPwWt")
+	// fmt.Printf("exist :%t\n", is)
+
 	testByFlags()
 	// testGetInfo()
 	// testDelFileAndGet()
